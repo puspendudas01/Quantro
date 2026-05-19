@@ -18,7 +18,7 @@ Designed for institutions to conduct exams over a local network (LAN) without re
 
 ---
 
-## 🚀 Features
+## Features
 
 **Admin**
 - Platform overview (student, teacher, and subject counts)
