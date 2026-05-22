@@ -5,6 +5,7 @@ import { startExam, saveAnswers, submitExam } from '../api/attemptApi';
 import useTimer from '../hooks/useTimer';
 import useViolationDetector from '../hooks/useViolationDetector';
 import Spinner from '../components/Spinner';
+import BrandLogo from '../components/BrandLogo';
 
 const STATUS = {
   NOT_VISITED:     { bg: '#cbd5e1', color: '#334155', label: 'Not Visited' },
@@ -102,21 +103,41 @@ export default function ExamPage() {
   const [visited,     setVisited]     = useState(new Set());
   const [activeSection, setActiveSection] = useState(null);
   const [submitting,  setSubmitting]  = useState(false);
+  const [submitted,   setSubmitted]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [snackbar,    setSnackbar]    = useState('');
 
   /* ── FULLSCREEN STATE ────────────────────────────────────────── */
   const [fsWarning,   setFsWarning]   = useState(null);  // { graceSeconds, exitsRemaining }
   const fsWarningRef  = useRef(false);                   // prevents double-modal
-  const inFullscreen  = useRef(false);
 
   const autoSaveRef   = useRef(null);
+  const snackbarTimerRef = useRef(null);
+  const redirectTimerRef = useRef(null);
+  const latestAnswersRef = useRef({});
+  const latestMarkedRef = useRef([]);
+  const saveChainRef = useRef(Promise.resolve());
   const startedRef    = useRef(false);
-  const [snackbar, setSnackbar] = useState("");
 
-  const showSnackbar = (msg) => {
-  setSnackbar(msg);
-  setTimeout(() => setSnackbar(""), 2000);
-};
+  const showSnackbar = useCallback((message) => {
+    if (!message) return;
+    setSnackbar(message);
+  }, []);
+
+  const queueSaveAnswers = useCallback(async (attemptId, payload) => {
+    if (!attemptId) return;
+
+    const runSave = async () => {
+      await saveAnswers(attemptId, payload);
+    };
+
+    // Serialize save requests to avoid stale in-flight autosave responses
+    // overwriting newer answers right before final submit.
+    const next = saveChainRef.current.then(runSave, runSave);
+    saveChainRef.current = next.catch(() => {});
+    return next;
+  }, []);
+
   /* ── LOAD SESSION ───────────────────────────────────────────── */
   useEffect(() => {
     if (startedRef.current) return;
@@ -131,7 +152,11 @@ export default function ExamPage() {
         if (s.sections)      setActiveSection(Object.keys(s.sections)[0]);
         setVisited(new Set());
       })
-      .catch(err => setError(err.response?.data?.message || 'Failed to start exam.'))
+      .catch(err => {
+        // Release stale lock if backend rejects start (e.g. already submitted).
+        localStorage.removeItem('exam_active');
+        setError(err.response?.data?.message || 'Failed to start exam.');
+      })
       .finally(() => setLoading(false));
   }, [examId]);
 
@@ -142,7 +167,6 @@ export default function ExamPage() {
       try {
         if (!document.fullscreenElement) {
           await document.documentElement.requestFullscreen();
-          inFullscreen.current = true;
         }
       } catch (e) { /* browser may deny on first load without user gesture */ }
     };
@@ -151,21 +175,28 @@ export default function ExamPage() {
 
   /* ── SUBMIT ──────────────────────────────────────────────────── */
   const doSubmit = useCallback(async () => {
-    if (!session || submitting) return;
+    if (!session || submitting || submitted) return;
     setSubmitting(true);
     try {
-      await saveAnswers(session.attemptId, { answers, markedForReview: marked });
+      await queueSaveAnswers(session.attemptId, {
+        answers: latestAnswersRef.current,
+        markedForReview: latestMarkedRef.current
+      });
       await submitExam(session.attemptId);
+      localStorage.removeItem('exam_active');
       // Exit fullscreen cleanly on submit
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen().catch(() => {});
       }
-      navigate('/result/' + session.attemptId);
+      setSubmitted(true);
+      redirectTimerRef.current = setTimeout(() => {
+        navigate('/student');
+      }, 5000);
     } catch (err) {
       setError('Submission failed: ' + (err.response?.data?.message || 'Please try again.'));
       setSubmitting(false);
     }
-  }, [session, submitting, answers, marked, navigate]);
+  }, [session, submitting, submitted, queueSaveAnswers, navigate]);
 
   /* ── FULLSCREEN EXIT CALLBACK (from violation detector) ──────── */
   const handleFullscreenExit = useCallback((data) => {
@@ -185,11 +216,38 @@ export default function ExamPage() {
     try {
       if (!document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
-        inFullscreen.current = true;
       }
     } catch (e) {}
     setFsWarning(null);
     fsWarningRef.current = false;
+  }, []);
+
+  const handleBackToDashboard = useCallback(() => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    navigate('/student');
+  }, [navigate]);
+
+  useEffect(() => {
+    latestAnswersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    latestMarkedRef.current = marked;
+  }, [marked]);
+
+  useEffect(() => {
+    if (!snackbar) return;
+    if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current);
+    snackbarTimerRef.current = setTimeout(() => setSnackbar(''), 2200);
+    return () => {
+      if (snackbarTimerRef.current) clearTimeout(snackbarTimerRef.current);
+    };
+  }, [snackbar]);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
   }, []);
 
   /* ── PREVENT REFRESH / BACK ─────────────────────────────────── */
@@ -210,37 +268,28 @@ export default function ExamPage() {
   useEffect(() => {
     if (!session) return;
     autoSaveRef.current = setInterval(async () => {
-      try { await saveAnswers(session.attemptId, { answers, markedForReview: marked }); }
+      try {
+        await queueSaveAnswers(session.attemptId, {
+          answers: latestAnswersRef.current,
+          markedForReview: latestMarkedRef.current
+        });
+      }
       catch (e) {}
     }, 30000);
     return () => clearInterval(autoSaveRef.current);
-  }, [session, answers, marked]);
+  }, [session, queueSaveAnswers]);
 
   const { format, isWarning, isCritical } = useTimer(
     session ? session.timeRemainingSeconds : null,
     doSubmit
   );
-  useEffect(() => {
-  const handleUnload = () => {
-    localStorage.removeItem("exam_active");
-  };
-  window.addEventListener("beforeunload", handleUnload);
-  return () => {
-    window.removeEventListener("beforeunload", handleUnload);
-    localStorage.removeItem("exam_active");
-  };
-}, []);
-  useEffect(() => {
-  return () => {
-    localStorage.removeItem("exam_active");
-  };
-}, []);
+
   /* ── VIOLATION DETECTOR ─────────────────────────────────────── */
   useViolationDetector(
     session?.attemptId,
     !!session,
     doSubmit,           // onAutoSubmit (hard violations)
-    handleFullscreenExit,
+    handleFullscreenExit, // onFullscreenExit (grace modal)
     showSnackbar
   );
 
@@ -273,7 +322,7 @@ export default function ExamPage() {
         <div style={{ fontSize:48, marginBottom:16 }}>⚠️</div>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Cannot Load Exam</h2>
         <p style={{ color:'var(--text-muted)', marginBottom:24 }}>{error}</p>
-        <button onClick={() => navigate('/student')}
+        <button onClick={() => { localStorage.removeItem('exam_active'); navigate('/student'); }}
           style={{ padding:'10px 24px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}>
           Back to Dashboard
         </button>
@@ -283,7 +332,58 @@ export default function ExamPage() {
 
   if (!session) return null;
 
+  if (submitted) return (
+    <div style={{ minHeight:'100vh', background:'#fff', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ textAlign:'center', maxWidth:480, width:'100%' }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
+        <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Answers Recorded</h2>
+        <p style={{ color:'var(--text-muted)', marginBottom:20 }}>
+          Your answers have been recorded. You can return to your dashboard now.
+        </p>
+        <button
+          onClick={handleBackToDashboard}
+          style={{ padding:'10px 20px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}
+        >
+          Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+
+  if (!session.questions?.length) return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)', padding:20 }}>
+      <div style={{ background:'#fff', borderRadius:12, padding:40, maxWidth:520, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
+        <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>No Questions Available</h2>
+        <p style={{ color:'var(--text-muted)', marginBottom:24 }}>
+          This exam session has no questions assigned. Please contact your instructor.
+        </p>
+        <button onClick={() => { localStorage.removeItem('exam_active'); navigate('/student'); }}
+          style={{ padding:'10px 24px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}>
+          Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+
   const q = session.questions[currentIdx];
+  const hasCombinedOptionIllustration = !!q.hasCombinedOptionImage;
+  const questionIllustrationSrc = q.hasQuestionImage ? `/questions/${q.id}/image` : null;
+  const optionIllustrationSrc = hasCombinedOptionIllustration
+    ? `/questions/${q.id}/combined-option-image`
+    : null;
+  const questionText = (q.questionText || '').trim();
+  const isCodeLike = (() => {
+    if (!questionText) return false;
+    const t = String(questionText);
+    const hasLineBreaks = t.includes('\n') || t.includes('\r');
+    const hasCodePunctuation = /[{};]|->|::/.test(t) || /\([^\)]*\)/.test(t);
+    const hasCodeKeywords = /\b(if|else|for|while|return|def|class|function|public|private|static|switch|case)\b/.test(t);
+    return hasLineBreaks || (hasCodePunctuation && hasCodeKeywords) || /\b#include\b/.test(t);
+  })();
+  const isQuestionTextBlank =
+    questionText === '' ||
+    questionText === 'Image-based question' ||
+    questionText === 'Question:';
   const f = format ? format() : { h:'00', m:'00', s:'00' };
   const sectionNames = session.sectionOrder || (session.sections ? Object.keys(session.sections) : []);
 
@@ -298,6 +398,7 @@ export default function ExamPage() {
           onReturnToFullscreen={handleReturnFullscreen}
         />
       )}
+
 
       {/* TOP BAR */}
       <div style={{ background:'#1e3a5f', color:'#fff', height:52, display:'flex', alignItems:'center', padding:'0 20px', justifyContent:'space-between', flexShrink:0, zIndex:100 }}>
@@ -347,27 +448,111 @@ export default function ExamPage() {
           {/* Question text + options */}
           <div style={{ flex:1, overflowY:'auto', padding:24 }}>
             <div style={{ background:'#fff', borderRadius:10, padding:24, marginBottom:16, boxShadow:'var(--shadow-sm)' }}>
-              <p style={{ fontSize:15, lineHeight:1.7, color:'var(--text-primary)', fontWeight:500 }}>{q.questionText}</p>
+              {isQuestionTextBlank && (
+                <div style={{ fontSize:14, fontWeight:700, color:'var(--text-secondary)', marginBottom:8 }}>
+                  Question:
+                </div>
+              )}
+
+              {questionIllustrationSrc && (
+                <div style={{ marginBottom: 14 }}>
+                  <img
+                    src={questionIllustrationSrc}
+                    alt="Question illustration"
+                    draggable={false}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    style={{
+                      maxWidth: '100%', maxHeight: 420, objectFit: 'contain', borderRadius: 6,
+                      display: 'block', border: '1px solid var(--border)', background: '#fff',
+                      userSelect: 'none', pointerEvents: 'none'
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Question text (may be empty when image alone is used) */}
+              {!isQuestionTextBlank && (
+                <p style={{
+                  fontSize:15,
+                  lineHeight:1.7,
+                  color:'var(--text-primary)',
+                  fontWeight:500,
+                  margin:0,
+                  whiteSpace:'pre-wrap',
+                  wordBreak:'break-word',
+                  fontFamily: isCodeLike ? 'Consolas, "Courier New", monospace' : 'inherit',
+                  background: isCodeLike ? '#f8fafc' : 'transparent',
+                  border: isCodeLike ? '1px solid var(--border)' : 'none',
+                  borderRadius: isCodeLike ? 6 : 0,
+                  padding: isCodeLike ? '10px 12px' : 0
+                }}>
+                  {questionText}
+                </p>
+              )}
+
+              {/* Combined option image shown below the question */}
+              {optionIllustrationSrc && (
+                <div style={{ marginTop:14 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:'var(--text-secondary)', marginBottom:8 }}>
+                    Options:
+                  </div>
+                  <img
+                    src={optionIllustrationSrc}
+                    alt="Options"
+                    draggable={false}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    style={{
+                      maxWidth: '100%', maxHeight: 420, objectFit: 'contain', borderRadius: 6,
+                      display: 'block', border: '1px solid var(--border)', background: '#fff',
+                      userSelect: 'none', pointerEvents: 'none'
+                    }}
+                  />
+                </div>
+              )}
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {q.options.map((opt, i) => {
                 const selected = answers[String(q.id)] === i;
+                const hasOptImg = q.optionHasImage && q.optionHasImage[i];
                 return (
                   <div key={i} onClick={() => handleAnswer(q.id, i)}
                     style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px',
                       background: selected ? '#eff6ff' : '#fff',
                       border:'2px solid '+(selected ? 'var(--primary)' : 'var(--border)'),
                       borderRadius:8, cursor:'pointer', transition:'border-color 0.1s, background 0.1s' }}>
+                    {/* Radio indicator */}
                     <div style={{ width:22, height:22, borderRadius:'50%', flexShrink:0,
                       border:'2px solid '+(selected?'var(--primary)':'#cbd5e1'),
                       background:selected?'var(--primary)':'#fff',
                       display:'flex', alignItems:'center', justifyContent:'center' }}>
                       {selected && <div style={{ width:8, height:8, borderRadius:'50%', background:'#fff' }} />}
                     </div>
+                    {/* Option label */}
                     <span style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)', minWidth:18 }}>
                       {String.fromCharCode(65+i)}.
                     </span>
-                    <span style={{ fontSize:14, color:'var(--text-primary)', lineHeight:1.5 }}>{opt}</span>
+                    {/* Option content: image and/or text */}
+                    <div style={{ flex:1 }}>
+                      {hasOptImg && (
+                        <img
+                          src={`/questions/${q.id}/option-image/${i}`}
+                          alt={`Option ${String.fromCharCode(65 + i)}`}
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
+                          onMouseDown={(e) => e.preventDefault()}
+                          style={{
+                            maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 4,
+                            display: 'block', marginBottom: opt ? 6 : 0, border: '1px solid var(--border)',
+                            userSelect: 'none', pointerEvents: 'none'
+                          }}
+                        />
+                      )}
+                      {opt && (
+                        <span style={{ fontSize:14, color:'var(--text-primary)', lineHeight:1.5 }}>{opt}</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -383,7 +568,7 @@ export default function ExamPage() {
                   background:marked.includes(q.id)?'#fff7ed':'#fff',
                   color:marked.includes(q.id)?'#f97316':'var(--text-secondary)',
                   borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13 }}>
-                {marked.includes(q.id) ? '🔖 Unmark' : '🔖 Mark for Review'}
+                {marked.includes(q.id) ? ' Unmark' : ' Mark for Review'}
               </button>
               <button onClick={() => handleClear(q.id)}
                 style={{ padding:'8px 16px', border:'1px solid var(--border)', background:'#fff',
@@ -537,12 +722,24 @@ export default function ExamPage() {
           </div>
         </div>
       )}
-      
-    {/*  SNACKBAR  */}
+
       {snackbar && (
-      <div className="snackbar show">
-      {snackbar}
-       </div>
+        <div style={{
+          position:'fixed',
+          left:'50%',
+          bottom:20,
+          transform:'translateX(-50%)',
+          background:'rgba(15,23,42,0.95)',
+          color:'#fff',
+          padding:'10px 14px',
+          borderRadius:8,
+          fontSize:13,
+          fontWeight:600,
+          zIndex:10001,
+          boxShadow:'0 8px 24px rgba(0,0,0,0.25)'
+        }}>
+          {snackbar}
+        </div>
       )}
     </div>
   );

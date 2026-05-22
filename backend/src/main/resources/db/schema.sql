@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS users (
     email       VARCHAR(255) NOT NULL UNIQUE,
     password    VARCHAR(255) NOT NULL,
     full_name   VARCHAR(255) NOT NULL,
+    enrollment_no VARCHAR(100) UNIQUE,
+    stream      VARCHAR(255),
+    section     VARCHAR(100),
+    class_roll_no VARCHAR(100),
+    date_of_birth DATE,
     role        VARCHAR(20)  NOT NULL CHECK (role IN ('ADMIN','TEACHER','STUDENT')),
     approved    BOOLEAN      NOT NULL DEFAULT FALSE,
     enabled     BOOLEAN      NOT NULL DEFAULT TRUE,
@@ -48,6 +53,7 @@ CREATE TABLE IF NOT EXISTS exam_blueprints (
     description      TEXT,
     duration_minutes INT NOT NULL,
     total_marks      INT,
+    option_shuffle   BOOLEAN DEFAULT TRUE,
     created_at       TIMESTAMP
 );
 
@@ -141,6 +147,10 @@ ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS fullscreen_exit_count INT DEF
 
 -- 3. Blueprint delete guard (no schema change — handled in service layer)
 
+-- 3b. Blueprint option shuffle toggle
+ALTER TABLE exam_blueprints
+    ADD COLUMN IF NOT EXISTS option_shuffle BOOLEAN NOT NULL DEFAULT TRUE;
+
 -- 4. New violation types (enum stored as VARCHAR — no migration needed, new values
 --    MOUSE_LEAVE and DEVTOOLS_OPEN are auto-handled by PostgreSQL VARCHAR column)
 
@@ -175,7 +185,83 @@ ALTER TABLE users
 ADD COLUMN IF NOT EXISTS is_logged_in BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS session_token VARCHAR(255);
 
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS enrollment_no VARCHAR(100),
+ADD COLUMN IF NOT EXISTS stream VARCHAR(255),
+ADD COLUMN IF NOT EXISTS section VARCHAR(100),
+ADD COLUMN IF NOT EXISTS class_roll_no VARCHAR(100),
+ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_enrollment_no ON users(enrollment_no);
+
 -- Backfill subject_ids from subject_id for any existing rows
 UPDATE blueprint_entries
 SET subject_ids = CAST(subject_id AS VARCHAR)
 WHERE subject_ids IS NULL AND subject_id IS NOT NULL;
+-- ═══════════════════════════════════════════════════════════════════════
+-- MIGRATION: Image support for questions and options
+-- Run once against existing databases. Safe to re-run (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
+-- For fresh installs: JPA ddl-auto=update will create these automatically from the entities.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- 1. Add image columns to the questions table
+ALTER TABLE questions
+    ADD COLUMN IF NOT EXISTS question_image      BYTEA,
+    ADD COLUMN IF NOT EXISTS question_image_type VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS combined_option_image BYTEA,
+    ADD COLUMN IF NOT EXISTS combined_option_image_type VARCHAR(50);
+
+-- 1b. Dedicated question images table (preferred storage)
+CREATE TABLE IF NOT EXISTS question_images (
+    id                         BIGSERIAL PRIMARY KEY,
+    question_id                BIGINT UNIQUE NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    question_image             BYTEA,
+    question_image_type        VARCHAR(50),
+    combined_option_image      BYTEA,
+    combined_option_image_type VARCHAR(50)
+);
+
+CREATE INDEX IF NOT EXISTS idx_question_images_question ON question_images(question_id);
+
+-- Backfill legacy image columns from questions table into question_images
+INSERT INTO question_images (
+    question_id,
+    question_image,
+    question_image_type,
+    combined_option_image,
+    combined_option_image_type
+)
+SELECT
+    q.id,
+    q.question_image,
+    q.question_image_type,
+    q.combined_option_image,
+    q.combined_option_image_type
+FROM questions q
+WHERE (q.question_image IS NOT NULL OR q.combined_option_image IS NOT NULL)
+  AND NOT EXISTS (
+      SELECT 1
+      FROM question_images qi
+      WHERE qi.question_id = q.id
+  );
+
+-- combined_option image columns are redundant in questions now that question_images
+-- is the single source of truth.
+ALTER TABLE questions
+    DROP COLUMN IF EXISTS combined_option_image,
+    DROP COLUMN IF EXISTS combined_option_image_type;
+
+-- 2. Create the option-images table
+--    Each row stores the image for one option slot of one question.
+--    (question_id, option_index) is unique — one image per slot.
+CREATE TABLE IF NOT EXISTS question_option_images (
+    id           BIGSERIAL PRIMARY KEY,
+    question_id  BIGINT      NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+    option_index INT         NOT NULL,
+    image_data   BYTEA       NOT NULL,
+    image_type   VARCHAR(50) NOT NULL,
+    UNIQUE (question_id, option_index)
+);
+
+-- Index for fast lookup by question
+CREATE INDEX IF NOT EXISTS idx_option_images_question ON question_option_images(question_id);
