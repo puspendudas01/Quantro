@@ -1,4 +1,4 @@
-# 🎓 Exam Nova – Online Exam System
+#  Exam Nova – Online Exam System
 
 ## 📌 Project Overview
 
@@ -133,7 +133,7 @@ npm start
 ## 📌 Future Improvements
 
 * AI-based proctoring
-* Multi-language support
+* Multi-language support system
 * Advanced analytics dashboard
 
 ---
