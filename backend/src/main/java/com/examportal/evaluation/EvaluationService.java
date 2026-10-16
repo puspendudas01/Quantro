@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -189,8 +191,10 @@ public class EvaluationService {
                 .studentId(r.getStudentId())
                 .studentName(student != null ? student.getFullName() : "Unknown")
                 .studentEmail(student != null ? student.getEmail() : "")
+                .studentEnrollmentNo(student != null ? student.getEnrollmentNo() : null)
                 .studentStream(student != null ? student.getStream() : null)
                 .studentSection(student != null ? student.getSection() : null)
+                .studentClassRollNo(student != null ? student.getClassRollNo() : null)
                 .studentYear(student != null ? student.getStudentYear() : null)
                 .examId(examId)
                 .examTitle(exam.getTitle())
@@ -217,27 +221,30 @@ public class EvaluationService {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet("Detailed Results");
 
+            CellStyle textStyle = wb.createCellStyle();
+            textStyle.setDataFormat(wb.createDataFormat().getFormat("@"));
+
+            CellStyle plainNumberStyle = wb.createCellStyle();
+            plainNumberStyle.setDataFormat(wb.createDataFormat().getFormat("0"));
+
             Row header = sheet.createRow(0);
             String[] cols = {
-                "Rank",
-                "Student Name",
-                "Enrollment Number",
-                "Stream",
-                "Section",
-                "Year",
-                "Exam Title",
-                "Total Score",
-                "Total Questions",
-                "Attempted",
-                "Correct",
-                "Wrong",
-                "Unattempted",
-                "Hard Violations",
-                "Fullscreen Exits",
-                "Submitted At",
-                "Evaluated At",
-                "Subject Breakdown",
-                "Violation Details"
+                    "Rank",
+                    "Student Name",
+                    "Email",
+                    "Enrollment No",
+                    "Stream",
+                    "Section",
+                    "Class Roll No",
+                    "Total Score",
+                    "Total Questions",
+                    "Attempted",
+                    "Correct",
+                    "Wrong",
+                    "Unattempted",
+                    "Hard Violations",
+                    "Fullscreen Exits",
+                    "Violation Details"
             };
             for (int i = 0; i < cols.length; i++) {
                 header.createCell(i).setCellValue(cols[i]);
@@ -250,24 +257,24 @@ public class EvaluationService {
 
                 row.createCell(0).setCellValue(i + 1);
                 row.createCell(1).setCellValue(nullSafe(r.getStudentName()));
-                row.createCell(2).setCellValue(nullSafe(r.getStudentId() != null ? r.getStudentId().toString() : ""));
-                row.createCell(3).setCellValue(nullSafe(r.getStudentStream()));
-                row.createCell(4).setCellValue(nullSafe(r.getStudentSection()));
-                row.createCell(5).setCellValue(nullSafe(r.getStudentYear()));
-                row.createCell(6).setCellValue(nullSafe(r.getStudentEmail()));
-                row.createCell(7).setCellValue(nullSafe(r.getExamTitle()));
-                row.createCell(8).setCellValue(r.getTotalScore() != null ? r.getTotalScore() : 0.0);
-                row.createCell(9).setCellValue(r.getTotalQuestions() != null ? r.getTotalQuestions() : 0);
-                row.createCell(10).setCellValue(r.getAttempted() != null ? r.getAttempted() : 0);
-                row.createCell(11).setCellValue(r.getCorrect() != null ? r.getCorrect() : 0);
-                row.createCell(12).setCellValue(r.getWrong() != null ? r.getWrong() : 0);
-                row.createCell(13).setCellValue(r.getUnattempted() != null ? r.getUnattempted() : 0);
-                row.createCell(14).setCellValue(r.getViolationCount() != null ? r.getViolationCount() : 0);
-                row.createCell(15).setCellValue(r.getFullscreenExitCount() != null ? r.getFullscreenExitCount() : 0);
-                row.createCell(16).setCellValue(r.getSubmittedAt() != null ? r.getSubmittedAt().toString() : "");
-                row.createCell(17).setCellValue(r.getEvaluatedAt() != null ? r.getEvaluatedAt().toString() : "");
-                row.createCell(18).setCellValue(safeJson(r.getSubjectWiseBreakdown()));
-                row.createCell(19).setCellValue(violationSummary(r.getViolations()));
+                row.createCell(2).setCellValue(nullSafe(r.getStudentEmail()));
+                Cell enrollCell = row.createCell(3);
+                enrollCell.setCellValue(nullSafe(r.getStudentEnrollmentNo()));
+                enrollCell.setCellStyle(textStyle);
+                row.createCell(4).setCellValue(nullSafe(r.getStudentStream()));
+                row.createCell(5).setCellValue(nullSafe(r.getStudentSection()));
+                Cell rollCell = row.createCell(6);
+                rollCell.setCellValue(parseNumeric(r.getStudentClassRollNo()));
+                rollCell.setCellStyle(plainNumberStyle);
+                row.createCell(7).setCellValue(r.getTotalScore() != null ? r.getTotalScore() : 0.0);
+                row.createCell(8).setCellValue(r.getTotalQuestions() != null ? r.getTotalQuestions() : 0);
+                row.createCell(9).setCellValue(r.getAttempted() != null ? r.getAttempted() : 0);
+                row.createCell(10).setCellValue(r.getCorrect() != null ? r.getCorrect() : 0);
+                row.createCell(11).setCellValue(r.getWrong() != null ? r.getWrong() : 0);
+                row.createCell(12).setCellValue(r.getUnattempted() != null ? r.getUnattempted() : 0);
+                row.createCell(13).setCellValue(r.getViolationCount() != null ? r.getViolationCount() : 0);
+                row.createCell(14).setCellValue(r.getFullscreenExitCount() != null ? r.getFullscreenExitCount() : 0);
+                row.createCell(15).setCellValue(violationSummary(r.getViolations()));
             }
 
             for (int i = 0; i < cols.length; i++) {
@@ -278,15 +285,6 @@ public class EvaluationService {
             return bos.toByteArray();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to generate detailed results Excel: " + e.getMessage());
-        }
-    }
-
-    private String safeJson(Object value) {
-        if (value == null) return "";
-        try {
-            return objectMapper.writeValueAsString(value);
-        } catch (Exception e) {
-            return String.valueOf(value);
         }
     }
 
@@ -305,6 +303,14 @@ public class EvaluationService {
     private String nullSafe(String value) {
         return value != null ? value : "";
     }
+    private double parseNumeric(String value) {
+    if (value == null || value.isBlank()) return 0;
+    try {
+        return Double.parseDouble(value.trim());
+    } catch (NumberFormatException e) {
+        return 0; // non-numeric roll/enrollment number, falls back to 0
+    }
+}
 
     private static class SubjectBreakdown {
         int correct = 0, wrong = 0, unattempted = 0, total = 0;

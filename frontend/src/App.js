@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import RegisterPage from './pages/RegisterPage';
 import StudentDashboard from './pages/StudentDashboard';
 import ExamPage from './pages/ExamPage';
@@ -15,14 +16,15 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/student" element={<ProtectedRoute role="STUDENT"><StudentDashboard /></ProtectedRoute>} />
           <Route path="/exam/:examId" element={<ProtectedRoute role="STUDENT"><ExamPage /></ProtectedRoute>} />
           <Route path="/result/:attemptId" element={<ProtectedRoute role="STUDENT"><ResultPage /></ProtectedRoute>} />
-          <Route path="/teacher" element={<ProtectedRoute role="TEACHER"><TeacherDashboard /></ProtectedRoute>} />
+          <Route path="/teacher" element={<ProtectedRoute roles={["TEACHER", "ADMIN"]}><TeacherDashboard /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute role="ADMIN"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

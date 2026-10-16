@@ -1,43 +1,55 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import api from "../api/axiosConfig";
-import { runLogoutFlow } from "../utils/authSession";
-import BrandLogo from "./BrandLogo";
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import api from '../api/axiosConfig';
+import { runLogoutFlow } from '../utils/authSession';
+import BrandLogo from './BrandLogo';
 
-const ROLE_LABEL = { ADMIN:"Administrator", TEACHER:"Teacher", STUDENT:"Student" };
-
-function Topbar({ subtitle }) {
+export default function Topbar({ badge, extra }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const signOut = async () => {
+    await runLogoutFlow({ apiClient: api, logout, onError: () => console.warn("Logout failed") });
+    navigate("/");
+  };
+  const btn = {
+    padding: "6px 14px",
+    border: "1px solid var(--border-input)",
+    borderRadius: "var(--radius-md)",
+    background: "#fff",
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600
+  };
   return (
-    <div style={{ background:"var(--primary)", color:"#fff", height:"var(--topbar-height)",
-      padding:"0 24px", display:"flex", alignItems:"center", justifyContent:"space-between",
-      flexShrink:0, boxShadow:"var(--shadow-md)", zIndex:100 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <BrandLogo width={132} style={{ filter: 'brightness(0) invert(1)' }} />
-        {subtitle && <div style={{ fontSize:11, opacity:0.75, lineHeight:1.3 }}>{subtitle}</div>}
+    <div style={{
+      position: "sticky",
+      top: 0,
+      zIndex: 100,
+      height: "var(--topbar-height)",
+      flexShrink: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 24px",
+      background: "rgba(255,255,255,0.92)",
+      backdropFilter: "blur(10px)",
+      borderTop: "3px solid var(--accent)",
+      borderBottom: "1px solid var(--border)",
+      boxShadow: "var(--shadow-sm)"
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <BrandLogo variant="text" width={140} />
+        {badge}
       </div>
-      <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-        <div style={{ textAlign:"right" }}>
-          <div style={{ fontSize:13, fontWeight:600 }}>{user?.fullName}</div>
-          <div style={{ fontSize:11, opacity:0.75 }}>{ROLE_LABEL[user?.role]}</div>
-        </div>
-        <button onClick={async () => {
-          await runLogoutFlow({
-            apiClient: api,
-            logout,
-            onError: () => console.warn("Logout failed")
-          });
-          navigate("/login");
-        }}
-          style={{ background:"rgba(255,255,255,0.12)", color:"#fff", border:"1px solid rgba(255,255,255,0.25)",
-            padding:"5px 14px", borderRadius:5, fontSize:13, cursor:"pointer", fontWeight:500 }}>
-          Sign Out
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+          Welcome, <strong>{user?.fullName}</strong>
+        </span>
+        {extra}
+        <button onClick={signOut} style={btn}>Sign out</button>
       </div>
     </div>
   );
 }
-
-export default Topbar;

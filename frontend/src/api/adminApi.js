@@ -16,6 +16,7 @@ export const createSubject = (data) => api.post('/subjects', data);
 /** CHANGE: Delete subject (cascades to questions) */
 export const deleteSubject = (id) => api.delete('/subjects/'+id);
 export const getQuestions = (subjectId) => api.get('/questions/subject/'+subjectId);
+export const clearQuestionBankBySubject = (subjectId) => api.delete('/questions/subject/'+subjectId);
 export const uploadQuestion = (data) => api.post('/questions', data);
 export const getExamResults = (examId) => api.get('/analytics/exam/'+examId);
 export const getExamSummary = (examId) => api.get('/analytics/exam/'+examId+'/summary');
@@ -25,3 +26,12 @@ export const getExamStudentResults = (examId) => api.get('/results/exam/'+examId
 export const evaluateExamResults = (examId) => api.post('/results/exam/' + examId + '/evaluate');
 export const downloadExamStudentResultsExcel = (examId) =>
 	api.get('/results/exam/' + examId + '/students/excel', { responseType: 'blob' });
+export const deleteExamAttempt = (enrollmentNo, examId) => 
+	api.delete('/admin/attempts', { params: { enrollmentNo, examId } });
+export const logoutAllUsers = () => api.post('/admin/users/logout-all');
+export const logoutUserSession = (enrollmentNoOrEmail) => api.post('/admin/users/logout', null, {
+	params: {
+		enrollmentNo: /^\d+$/.test((enrollmentNoOrEmail || '').trim()) ? enrollmentNoOrEmail.trim() : undefined,
+		email: /^\d+$/.test((enrollmentNoOrEmail || '').trim()) ? undefined : (enrollmentNoOrEmail || '').trim() || undefined
+	}
+});

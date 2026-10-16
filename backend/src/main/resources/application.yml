@@ -1,0 +1,79 @@
+server:
+  address: 0.0.0.0
+  port: 8080
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000
+  refresh-expiration: 604800000
+
+web:
+  resources:
+    static-locations: classpath:/static/
+mvc:
+  static-path-pattern: /**
+
+features:
+  admin: true
+  teacher: true
+  analytics: true
+  blueprint: true
+  proctor: true
+  ai: false
+  pdf: true
+  email: false
+
+exam:
+  proctor:
+    max-violations: 1
+    max-fullscreen-exits: 1
+    fullscreen-grace-seconds: 10
+  timer:
+    grace-period-seconds: 30
+
+prefetch:
+  enabled: ${PREFETCH_ENABLED:true}
+  base-url: ${PREFETCH_BASE_URL:http://localhost:8081}
+  connect-timeout-ms: ${PREFETCH_CONNECT_TIMEOUT_MS:2000}
+  read-timeout-ms: ${PREFETCH_READ_TIMEOUT_MS:10000}
+  max-concurrency: ${PREFETCH_MAX_CONCURRENCY:4}
+
+logging:
+  level:
+    com.examportal: INFO
+    org.springframework.security: WARN

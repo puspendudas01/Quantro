@@ -62,13 +62,19 @@ public class SecurityConfig {
                                 "/register",
                                 "/index.html",
                                 "/static/**",
+                                "/landing/**",
+                                "/favicon.ico",
+                                "/*png",
+                                "/*.ico",
+                                "/*.json",
+                                "/*.txt",
                                 "/auth/**",
                                 "/student/**",
                                 "/teacher/**",
                                 "/admin/**",
                                 // Image endpoints — public so <img> tags load without auth headers
                                 "/questions/*/image",
-                        "/questions/*/combined-option-image",
+                                "/questions/*/combined-option-image",
                                 "/questions/*/option-image/*"
                         ).permitAll()
                         .anyRequest().authenticated())

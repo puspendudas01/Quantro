@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -104,7 +105,10 @@ public class ProctorService {
         attempt.setFullscreenExitCount(attempt.getFullscreenExitCount() + 1);
         int exitsRemaining = Math.max(0, maxFullscreenExits - attempt.getFullscreenExitCount());
         boolean autoSubmitted = attempt.getFullscreenExitCount() >= maxFullscreenExits;
-        if (autoSubmitted) attempt.setStatus(AttemptStatus.AUTO_SUBMITTED);
+        if (autoSubmitted) {
+            attempt.setStatus(AttemptStatus.AUTO_SUBMITTED);
+            attempt.setSubmittedAt(LocalDateTime.now());
+        }
         attemptRepository.save(attempt);
 
         return Map.of(

@@ -2,11 +2,7 @@
 # React / Node
 # ===============================
 node_modules/
-build/
 dist/
-.next/
-out/
-
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -25,7 +21,7 @@ target/
 logs/
 
 # ===============================
-# Environment files
+# Environment files (.env.example stays tracked)
 # ===============================
 .env
 .env.local
@@ -33,9 +29,13 @@ logs/
 .env.test.local
 .env.production.local
 
-# Spring Boot config (if sensitive)
-application.properties
-application.yml
+# ===============================
+# Project-specific
+# ===============================
+backend/.github/
+backend/src_backend.zip
+backend/compile-check
+frontend/src_frontend.zip
 
 # ===============================
 # IDE / Editor files

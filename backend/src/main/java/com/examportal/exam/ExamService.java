@@ -244,7 +244,9 @@ public class ExamService {
     }
 
     public List<ExamDTO> findAll() {
-        return examRepository.findAll().stream().map(this::toDTO).collect(Collectors.toList());
+        List<ExamDTO> exams = examRepository.findAll().stream().map(this::toDTO).collect(Collectors.toList());
+        Collections.reverse(exams);
+        return exams;
     }
 
     public ExamDTO findById(Long id) { return toDTO(getEntity(id)); }

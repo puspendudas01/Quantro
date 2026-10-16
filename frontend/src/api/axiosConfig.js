@@ -36,8 +36,8 @@ api.interceptors.response.use((res) => res, (err) => {
   if (status === 401 && !isAuthRequest) {
     alert("Session expired or logged in from another device");
     clearLocalAuthState();
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
+    if (window.location.pathname !== '/') {
+      window.location.href = '/';
     }
   }
 

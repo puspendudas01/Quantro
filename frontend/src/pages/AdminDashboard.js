@@ -7,17 +7,14 @@ import {
   getSubjects, createSubject, deleteSubject
 } from '../api/adminApi';
 import { createBlueprint, createExam, publishExam, cancelExam, rescheduleExam, getAllExams, getBlueprints, deleteBlueprint, deleteExam, updateBlueprint } from '../api/examApi';
+import { deleteExamAttempt, logoutAllUsers, logoutUserSession } from '../api/adminApi';
 import ExamResultsViewer from '../components/ExamResultsViewer';
-import BrandLogo from '../components/BrandLogo';
+import Topbar from '../components/Topbar';
 import Spinner from '../components/Spinner';
 import api from '../api/axiosConfig';
 import { runLogoutFlow } from '../utils/authSession';
-
-const TABS = ['Overview','Students','Teachers','Subjects','Blueprints','Exams','Results'];
-const tabIcon = { Overview:'📊', Students:'🎓', Teachers:'👨‍🏫', Subjects:'📚', Blueprints:'🗺', Exams:'📋', Results:'🏆' };
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const inp = { width:'100%', padding:'8px 10px', border:'1px solid var(--border)', borderRadius:5, fontSize:13, boxSizing:'border-box' };
+const TABS = ['Overview','Students','Teachers','Subjects','Question Upload','Blueprints','Exams','Exam Control','Results'];
+const inp = { width:'100%', padding:'10px 14px', border:'1.5px solid var(--border-input)', borderRadius:10, fontSize:13, boxSizing:'border-box' };
 const lbl = { fontSize:12, fontWeight:700, color:'var(--text-secondary)', display:'block', marginBottom:5 };
 
 function statusBadge(s) {
@@ -221,18 +218,17 @@ function StudentsTab({ flash }) {
 
 // ── TEACHERS TAB ─────────────────────────────────────────────────────────────
 function TeachersTab({ flash }) {
-  const [pending,  setPending]  = useState([]);
+  const [pending, setPending] = useState([]);
   const [approved, setApproved] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [search,   setSearch]   = useState('');
-  const [view,     setView]     = useState('pending'); // 'pending' | 'approved'
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState('pending');
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([getPendingTeachers(), getAllTeachers()])
       .then(([pr, ar]) => {
-        setPending(pr.data.data  || []);
-        // getAllTeachers returns all (including pending); filter to approved
+        setPending(pr.data.data || []);
         const all = ar.data.data || [];
         setApproved(all.filter(t => t.approved));
       })
@@ -249,7 +245,9 @@ function TeachersTab({ flash }) {
       setPending(p => p.filter(t => t.id !== id));
       if (teacher) setApproved(a => [...a, { ...teacher, approved: true }]);
       flash('Teacher approved.');
-    } catch(e) { flash(e.response?.data?.message || 'Failed to approve.', false); }
+    } catch (e) {
+      flash(e.response?.data?.message || 'Failed to approve.', false);
+    }
   };
 
   const filteredApproved = useMemo(() => {
@@ -278,7 +276,7 @@ function TeachersTab({ flash }) {
         ].map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
             style={{padding:'10px 20px',border:'none',cursor:'pointer',fontWeight:view===t.key?700:400,fontSize:13,
-              background:view===t.key?'var(--primary)':'transparent',color:view===t.key?'#fff':'var(--text-secondary)'}}>
+              background:view===t.key?'var(--primary-gradient)':'transparent',color:view===t.key?'#fff':'var(--text-secondary)'}}>
             {t.label}
             <span style={{marginLeft:6,padding:'1px 7px',borderRadius:10,fontSize:11,fontWeight:700,
               background:view===t.key?'rgba(255,255,255,0.2)':'var(--bg-panel)',color:view===t.key?'#fff':'var(--text-muted)'}}>
@@ -298,12 +296,11 @@ function TeachersTab({ flash }) {
               style={{...inp, width:280, margin:0}} />
           </div>
         {filteredPending.length === 0 ? (
-          <div style={{background:'#fff',borderRadius:12,padding:40,textAlign:'center',boxShadow:'var(--shadow-sm)'}}>
-            <div style={{fontSize:40,marginBottom:12}}>✅</div>
+          <div style={{background:'#fff',borderRadius:16,padding:40,textAlign:'center',boxShadow:'var(--shadow-sm)'}}>
             <p style={{color:'var(--text-muted)'}}>{pending.length === 0 ? 'No pending teacher approvals.' : 'No teachers match your search.'}</p>
           </div>
         ) : (
-          <div style={{background:'#fff',borderRadius:12,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+          <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
             <table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead>
                 <tr style={{background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}>
@@ -320,7 +317,7 @@ function TeachersTab({ flash }) {
                     <td style={{padding:'12px 16px',color:'var(--text-muted)'}}>{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '—'}</td>
                     <td style={{padding:'12px 16px'}}>
                       <button onClick={() => handleApprove(t.id)}
-                        style={{padding:'6px 16px',background:'var(--success)',color:'#fff',border:'none',borderRadius:5,fontWeight:600,cursor:'pointer',fontSize:12}}>
+                        style={{padding:'6px 16px',background:'var(--success)',color:'#fff',border:'none',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
                         Approve
                       </button>
                     </td>
@@ -332,7 +329,7 @@ function TeachersTab({ flash }) {
         )}
         </div>
       ) : (
-        <div style={{background:'#fff',borderRadius:12,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+        <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
           <div style={{padding:'12px 16px',background:'#f8fafc',borderBottom:'1px solid var(--border)'}}>
             <input placeholder="Search by name or email..."
               value={search} onChange={e => setSearch(e.target.value)}
@@ -371,6 +368,241 @@ function TeachersTab({ flash }) {
   );
 }
 
+// ── DELETE ATTEMPTS TAB ──────────────────────────────────────────────────────
+function DeleteAttemptsTab({ flash }) {
+  const [enrollmentNo, setEnrollmentNo] = useState('');
+  const [selectedExamId, setSelectedExamId] = useState('');
+  const [exams, setExams] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [examsLoading, setExamsLoading] = useState(true);
+  const [logoutField, setLogoutField] = useState('');
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+
+  useEffect(() => {
+    setExamsLoading(true);
+    getAllExams()
+      .then(r => {
+        const allExams = r.data.data || [];
+        // Filter for ongoing exams (PUBLISHED status and currently active time-wise)
+        const now = new Date();
+        const ongoingExams = allExams.filter(e => 
+          e.status === 'PUBLISHED' && 
+          new Date(e.scheduledStart) <= now && 
+          now <= new Date(e.scheduledEnd)
+        );
+        // If no ongoing exams, show all published exams
+        setExams(ongoingExams.length > 0 ? ongoingExams : allExams.filter(e => e.status === 'PUBLISHED'));
+      })
+      .catch(() => flash('Failed to load exams.', false))
+      .finally(() => setExamsLoading(false));
+  }, [flash]);
+
+  const handleDelete = async (e) => {
+    e.preventDefault();
+    
+    if (!enrollmentNo.trim()) {
+      flash('Please enter enrollment number.', false);
+      return;
+    }
+    if (!selectedExamId) {
+      flash('Please select an exam.', false);
+      return;
+    }
+
+    if (!window.confirm(`Delete exam attempt for enrollment "${enrollmentNo}" in exam "${exams.find(ex => ex.id === parseInt(selectedExamId))?.title}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await deleteExamAttempt(enrollmentNo.trim(), parseInt(selectedExamId));
+      flash('Exam attempt deleted successfully.', true);
+      setEnrollmentNo('');
+      setSelectedExamId('');
+    } catch (err) {
+      flash(err.response?.data?.message || 'Failed to delete exam attempt.', false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogoutAllUsers = async () => {
+    if (!window.confirm('Logout all users EXCEPT your admin session?')) return;
+    setLogoutAllLoading(true);
+    try {
+      const res = await logoutAllUsers();
+      const count = res.data?.data?.loggedOutUsers ?? 0;
+      const adminPreserved = res.data?.data?.adminPreserved ?? false;
+      const message = adminPreserved 
+        ? `Logged out ${count} active sessions. Your admin session remains active.`
+        : `Logged out ${count} active sessions.`;
+      flash(message, true);
+    } catch (err) {
+      flash(err.response?.data?.message || 'Failed to logout all users.', false);
+    } finally {
+      setLogoutAllLoading(false);
+    }
+  };
+
+  const handleLogoutUserSession = async (e) => {
+    e.preventDefault();
+    if (!logoutField.trim()) {
+      flash('Please enter an enrollment number or email.', false);
+      return;
+    }
+    if (!window.confirm(`Clear the login session for "${logoutField.trim()}"?`)) return;
+    setLogoutLoading(true);
+    try {
+      const res = await logoutUserSession(logoutField.trim());
+      const email = res.data?.data?.email || 'user';
+      flash(`Session cleared for ${email}.`, true);
+      setLogoutField('');
+    } catch (err) {
+      flash(err.response?.data?.message || 'Failed to clear user session.', false);
+    } finally {
+      setLogoutLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={{fontSize:22,fontWeight:700,marginBottom:20}}>Exam Control</h2>
+      
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, maxWidth:1200, alignItems:'start'}}>
+        <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',padding:24}}>
+          <p style={{fontSize:13,color:'var(--text-muted)',marginBottom:20,lineHeight:1.6}}>
+            Use this tool to remove an exam attempt record. This will delete the attempt, evaluation results, and violation logs for the selected student and exam.
+          </p>
+
+          <form onSubmit={handleDelete} style={{display:'flex',flexDirection:'column',gap:16}}>
+            <div>
+              <label style={lbl}>Enrollment Number</label>
+              <input
+                type="text"
+                value={enrollmentNo}
+                onChange={e => setEnrollmentNo(e.target.value)}
+                placeholder="e.g. 12025002036021"
+                style={inp}
+                disabled={loading}
+              />
+            </div>
+
+            <div>
+              <label style={lbl}>Select Exam</label>
+              {examsLoading ? (
+                <div style={{padding:12,fontSize:13,color:'var(--text-muted)'}}>Loading exams...</div>
+              ) : exams.length === 0 ? (
+                <div style={{padding:12,fontSize:13,color:'var(--text-muted)'}}>No published exams available.</div>
+              ) : (
+                <select
+                  value={selectedExamId}
+                  onChange={e => setSelectedExamId(e.target.value)}
+                  style={{...inp, height:40}}
+                  disabled={loading}
+                  required
+                >
+                  <option value="">-- Select an exam --</option>
+                  {exams.map(exam => (
+                    <option key={exam.id} value={exam.id}>
+                      {exam.title} ({new Date(exam.scheduledStart).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || exams.length === 0}
+              style={{
+                padding:'11px',
+                background:'var(--danger)',
+                color:'#fff',
+                border:'none',
+                borderRadius:6,
+                fontSize:15,
+                fontWeight:600,
+                cursor: (loading || exams.length === 0) ? 'not-allowed' : 'pointer',
+                opacity: (loading || exams.length === 0) ? 0.6 : 1,
+                display:'flex',
+                alignItems:'center',
+                justifyContent:'center',
+                gap:8
+              }}
+            >
+              {loading ? <Spinner size={18} color="#fff" /> : null}
+              {loading ? 'Deleting...' : 'Delete Attempt'}
+            </button>
+          </form>
+
+          <div style={{marginTop:24,padding:16,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--danger)',marginBottom:6}}>⚠ Warning</div>
+            <p style={{fontSize:12,color:'var(--text-muted)',margin:0,lineHeight:1.5}}>
+              This action permanently removes the exam attempt record including evaluation results and violation logs. The student may re-attempt if the exam is still active.
+            </p>
+          </div>
+        </div>
+
+        <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',padding:24}}>
+          <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>Logout User Sessions</h3>
+
+          <div style={{marginBottom:18, padding:16, background:'#f8fafc', border:'1px solid var(--border)', borderRadius:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--text-secondary)',marginBottom:8}}>Logout All Active Users</div>
+            <button
+              type="button"
+              onClick={handleLogoutAllUsers}
+              disabled={logoutAllLoading}
+              style={{
+                padding:'10px 16px',
+                background:'var(--primary-gradient)',
+                color:'#fff',
+                border:'none',
+                borderRadius:10,
+                fontWeight:600,
+                cursor: logoutAllLoading ? 'not-allowed' : 'pointer',
+                opacity: logoutAllLoading ? 0.6 : 1
+              }}
+            >
+              {logoutAllLoading ? 'Logging out...' : 'Logout All'}
+            </button>
+          </div>
+
+          <form onSubmit={handleLogoutUserSession} style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div>
+              <label style={lbl}>Enrollment No or Email</label>
+              <input
+                type="text"
+                value={logoutField}
+                onChange={e => setLogoutField(e.target.value)}
+                placeholder="Enter enrollment number or email"
+                style={inp}
+                disabled={logoutLoading}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={logoutLoading}
+              style={{
+                padding:'10px 16px',
+                background:'#ef4444',
+                color:'#fff',
+                border:'none',
+                borderRadius:6,
+                fontWeight:600,
+                cursor: logoutLoading ? 'not-allowed' : 'pointer',
+                opacity: logoutLoading ? 0.6 : 1
+              }}
+            >
+              {logoutLoading ? 'Clearing Session...' : 'Logout This User'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -385,7 +617,7 @@ export default function AdminDashboard() {
   const [msg,      setMsg]      = useState({ text:'', ok:true });
   const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'' });
   const [examForm,    setExamForm]    = useState({ title:'', description:'', blueprintId:'', scheduledStart:'', scheduledEnd:'', durationMinutes:60 });
-  const [blueprintForm, setBlueprintForm] = useState({ name:'', description:'', durationMinutes:60, totalMarks:10, entries:[] });
+  const [blueprintForm, setBlueprintForm] = useState({ name:'', description:'', durationMinutes:60, totalMarks:10, optionShuffle: true, entries:[] });
   const [isEditingBlueprint, setIsEditingBlueprint] = useState(false);
   const [editingBlueprintId, setEditingBlueprintId] = useState(null);
   const showSectionName = blueprintForm.entries.length > 1;
@@ -409,7 +641,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const handleBack = async () => {
       await runLogoutFlow({ apiClient:api, logout, onError:()=>console.warn('Logout failed') });
-      navigate('/login', { replace:true });
+      navigate('/', { replace:true });
     };
     window.history.pushState(null, '', window.location.href);
     window.addEventListener('popstate', handleBack);
@@ -464,7 +696,7 @@ export default function AdminDashboard() {
         const updated = r.data?.data;
         setBlueprints(p => p.map(b => b.id === editingBlueprintId ? updated : b));
         setSelectedBlueprint(prev => prev && prev.id === editingBlueprintId ? updated : prev);
-        setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,entries:[]});
+        setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]});
         setIsEditingBlueprint(false);
         setEditingBlueprintId(null);
         flash('Blueprint updated.');
@@ -474,7 +706,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    try { const r=await createBlueprint(blueprintForm); setBlueprints(p=>[...p,r.data.data]); setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,entries:[]}); flash('Blueprint created.'); }
+    try { const r=await createBlueprint(blueprintForm); setBlueprints(p=>[...p,r.data.data]); setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]}); flash('Blueprint created.'); }
     catch(e) { flash(e.response?.data?.message||'Failed to create blueprint.',false); }
   };
 
@@ -483,6 +715,7 @@ export default function AdminDashboard() {
     setBlueprintForm({
       name: bp.name || '',
       description: bp.description || '',
+      optionShuffle: bp.optionShuffle == null ? true : bp.optionShuffle,
       durationMinutes: bp.durationMinutes || 60,
       totalMarks: bp.totalMarks || 0,
       entries: (bp.entries || []).map(e => ({
@@ -498,7 +731,7 @@ export default function AdminDashboard() {
   };
 
   const handleCancelBlueprintEdit = () => {
-    setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,entries:[]});
+    setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]});
     setIsEditingBlueprint(false);
     setEditingBlueprintId(null);
   };
@@ -511,9 +744,9 @@ export default function AdminDashboard() {
 
   const handleCreateExam = async (e) => {
     e.preventDefault();
-    try { const r=await createExam(examForm); setExams(p=>[...p,r.data.data]); setExamForm({title:'',description:'',blueprintId:'',scheduledStart:'',scheduledEnd:'',durationMinutes:60}); flash('Exam created as DRAFT.'); }
+    try { const r=await createExam(examForm); setExams(p=>[r.data.data, ...p]); setExamForm({title:'',description:'',blueprintId:'',scheduledStart:'',scheduledEnd:'',durationMinutes:60}); flash('Exam created as DRAFT.'); }
     catch(e) { flash(e.response?.data?.message||'Failed to create exam.',false); }
-  };
+};
 
   const handlePublish = async (id) => {
     try { await publishExam(id); setExams(p=>p.map(e=>e.id===id?{...e,status:'PUBLISHED'}:e)); flash('Exam published.'); }
@@ -568,23 +801,16 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     await runLogoutFlow({ apiClient:api, logout, onError:()=>console.warn('Logout API failed') });
-    navigate('/login');
+    navigate('/');
   };
 
   return (
     <div style={{minHeight:'100vh',background:'var(--bg)',display:'flex',flexDirection:'column'}}>
 
       {/* Navbar */}
-      <div style={{background:'#fff',borderBottom:'1px solid var(--border)',height:56,display:'flex',alignItems:'center',padding:'0 0px',justifyContent:'space-between',boxShadow:'var(--shadow-sm)',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <BrandLogo variant="text" width={140} />
-          <span style={{marginLeft:8,padding:'2px 8px',background:'#fef3c7',color:'#92400e',borderRadius:4,fontSize:11,fontWeight:700}}>ADMIN</span>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:16}}>
-          <span style={{fontSize:13,color:'var(--text-secondary)'}}>Welcome, <strong>{user?.fullName}</strong></span>
-          <button onClick={handleLogout} style={{padding:'6px 14px',border:'1px solid var(--border)',borderRadius:6,background:'#fff',color:'var(--text-secondary)',cursor:'pointer',fontSize:13}}>Sign out</button>
-        </div>
-      </div>
+      <Topbar
+        badge={<span style={{marginLeft:8,padding:'2px 8px',background:'#fef3c7',color:'#92400e',borderRadius:4,fontSize:11,fontWeight:700}}>ADMIN</span>}
+      />
 
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
@@ -593,10 +819,11 @@ export default function AdminDashboard() {
           {TABS.map(t => (
             <button key={t} onClick={() => goToTab(t)}
               style={{width:'100%',textAlign:'left',padding:'12px 20px',border:'none',borderBottom:'1px solid var(--border-light)',
+                borderLeft: tab===t ? '3px solid var(--accent)' : '3px solid transparent',
                 background:tab===t?'var(--primary-light)':'transparent',
                 color:tab===t?'var(--primary)':'var(--text-primary)',
                 fontWeight:tab===t?700:400,cursor:'pointer',fontSize:14}}>
-              {tabIcon[t]} {t}
+              {t}
             </button>
           ))}
         </div>
@@ -616,49 +843,40 @@ export default function AdminDashboard() {
               <h2 style={{fontSize:22,fontWeight:700,marginBottom:20}}>Platform Overview</h2>
               <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20,marginBottom:24}}>
                 {[
-                  { label:'Total Students', val:stats.totalStudents??'—', icon:'🎓', color:'var(--primary)', tab:'Students', hint:'Click to manage students' },
-                  { label:'Total Teachers', val:stats.totalTeachers??'—', icon:'👨‍🏫', color:'var(--success)', tab:'Teachers', hint:'Click to manage teachers' },
-                  { label:'Subjects',       val:subjects.length,          icon:'📚', color:'var(--warning)', tab:'Subjects', hint:'Click to manage subjects' },
+                  { label:'Total Students', val:stats.totalStudents??'—', color:'var(--primary)', tab:'Students', hint:'Click to manage students' },
+                  { label:'Total Teachers', val:stats.totalTeachers??'—', color:'var(--success)', tab:'Teachers', hint:'Click to manage teachers' },
+                  { label:'Subjects',       val:subjects.length,          color:'var(--warning)', tab:'Subjects', hint:'Click to manage subjects' },
                 ].map(c => (
                   <button key={c.label} onClick={() => goToTab(c.tab)}
-                    style={{background:'#fff',borderRadius:12,boxShadow:'var(--shadow-sm)',padding:24,border:'1px solid transparent',
+                    style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',padding:24,border:'1px solid transparent',
                       textAlign:'left',cursor:'pointer',transition:'border-color 0.15s',outline:'none'}}
                     onMouseEnter={e => e.currentTarget.style.borderColor='var(--primary)'}
                     onMouseLeave={e => e.currentTarget.style.borderColor='transparent'}>
-                    <div style={{display:'flex',alignItems:'center',gap:12}}>
-                      <span style={{fontSize:28}}>{c.icon}</span>
-                      <div>
-                        <div style={{fontSize:28,fontWeight:800,color:c.color}}>{c.val}</div>
-                        <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.label}</div>
-                        <div style={{fontSize:11,color:'var(--primary)',marginTop:2,fontWeight:600}}>{c.hint}</div>
-                      </div>
+                    <div>
+                      <div style={{fontSize:28,fontWeight:800,color:c.color}}>{c.val}</div>
+                      <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.label}</div>
+                      <div style={{fontSize:11,color:'var(--primary)',marginTop:2,fontWeight:600}}>{c.hint}</div>
                     </div>
                   </button>
                 ))}
               </div>
 
-              {/*{/* Quick stats row */}
-             {/*} <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20}}>
-                {[
-                  { label:'Total Exams',      val:stats.totalExams??'—',      icon:'📋', color:'#6d28d9', tab:'Exams' },
-                  { label:'Active Blueprints', val:stats.totalBlueprints??'—', icon:'🗺',  color:'#0369a1', tab:'Blueprints' },
-                  { label:'Results Ready',    val:stats.totalResults??'—',    icon:'🏆', color:'#b45309', tab:'Results' },
-                ].map(c => (
-                  <button key={c.label} onClick={() => goToTab(c.tab)}
-                    style={{background:'#fff',borderRadius:12,boxShadow:'var(--shadow-sm)',padding:'16px 20px',border:'1px solid transparent',
-                      textAlign:'left',cursor:'pointer',transition:'border-color 0.15s'}}
-                    onMouseEnter={e => e.currentTarget.style.borderColor=c.color}
-                    onMouseLeave={e => e.currentTarget.style.borderColor='transparent'}>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <span style={{fontSize:22}}>{c.icon}</span>
-                      <div>
-                        <div style={{fontSize:20,fontWeight:800,color:c.color}}>{c.val}</div>
-                        <div style={{fontSize:12,color:'var(--text-muted)'}}>{c.label}</div>
-                      </div>
+              <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',padding:20,maxWidth:760}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Question Upload</div>
+                    <div style={{fontSize:13,color:'var(--text-muted)'}}>
+                      Admin can access the full question upload workspace (single upload, bulk Excel/ZIP upload, and subject-wise upload).
                     </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/teacher')}
+                    style={{padding:'9px 14px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:700,cursor:'pointer',fontSize:13}}>
+                    Open Upload Workspace
                   </button>
-                ))}
-              </div>*/}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -671,18 +889,18 @@ export default function AdminDashboard() {
           {/* ── SUBJECTS ── */}
           {tab === 'Subjects' && (
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-              <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+              <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
                 <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}>
                   <h3 style={{fontSize:15,fontWeight:700}}>Create New Subject</h3>
                 </div>
                 <form onSubmit={handleCreateSubject} style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
-                  <div><label style={lbl}>Subject Name</label><input value={subjectForm.name} onChange={e=>setSubjectForm(f=>({...f,name:e.target.value}))} required placeholder="Engineering Mathematics" style={inp}/></div>
-                  <div><label style={lbl}>Subject Code</label><input value={subjectForm.code} onChange={e=>setSubjectForm(f=>({...f,code:e.target.value}))} required placeholder="MATH101" style={inp}/></div>
+                  <div><label style={lbl}>Subject Name</label><input value={subjectForm.name} onChange={e=>setSubjectForm(f=>({...f,name:e.target.value}))} required placeholder="Aptitude" style={inp}/></div>
+                  <div><label style={lbl}>Subject Code</label><input value={subjectForm.code} onChange={e=>setSubjectForm(f=>({...f,code:e.target.value}))} required placeholder="APT101" style={inp}/></div>
                   <div><label style={lbl}>Description</label><textarea value={subjectForm.description} onChange={e=>setSubjectForm(f=>({...f,description:e.target.value}))} rows={3} style={{...inp,resize:'vertical',fontFamily:'inherit'}}/></div>
-                  <button type="submit" style={{padding:'10px',background:'var(--primary)',color:'#fff',border:'none',borderRadius:5,fontWeight:600,cursor:'pointer'}}>Create Subject</button>
+                  <button type="submit" style={{padding:'10px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:600,cursor:'pointer'}}>Create Subject</button>
                 </form>
               </div>
-              <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+              <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
                 <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}>
                   <h3 style={{fontSize:15,fontWeight:700}}>All Subjects ({subjects.length})</h3>
                 </div>
@@ -694,8 +912,8 @@ export default function AdminDashboard() {
                         <div style={{fontSize:12,color:'var(--text-muted)'}}>Code: <strong>{s.code}</strong></div>
                       </div>
                       <button onClick={() => handleDeleteSubject(s.id, s.name)}
-                        style={{padding:'5px 12px',background:'#fef2f2',color:'var(--danger)',border:'1px solid #fecaca',borderRadius:5,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                        🗑 Delete
+                        style={{padding:'5px 12px',background:'#fef2f2',color:'var(--danger)',border:'1px solid #fecaca',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                        Delete
                       </button>
                     </div>
                   ))}
@@ -704,10 +922,26 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* ── QUESTION UPLOAD ── */}
+          {tab === 'Question Upload' && (
+            <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',padding:24,maxWidth:820}}>
+              <h2 style={{fontSize:22,fontWeight:700,marginBottom:10}}>Question Upload</h2>
+              <p style={{fontSize:13,color:'var(--text-muted)',lineHeight:1.6,marginBottom:16}}>
+                Use the upload workspace to manage single-question uploads with images, bulk Excel uploads, ZIP bundle uploads,
+                and subject-wise uploads. This is the same full module used by teachers and is now available for admin as well.
+              </p>
+              <button
+                onClick={() => navigate('/teacher')}
+                style={{padding:'10px 16px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:700,cursor:'pointer',fontSize:13}}>
+                Open Full Upload Module
+              </button>
+            </div>
+          )}
+
           {/* ── BLUEPRINTS ── */}
           {tab === 'Blueprints' && (
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-              <div style={{background:'#fff',padding:24,borderRadius:10,boxShadow:'var(--shadow-sm)'}}>
+              <div style={{background:'#fff',padding:24,borderRadius:16,boxShadow:'var(--shadow-sm)'}}>
                 <h3 style={{fontSize:15,fontWeight:700,marginBottom:18}}>{isEditingBlueprint ? 'Edit Blueprint' : 'Create Blueprint'}</h3>
                 {isEditingBlueprint && (
                   <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>
@@ -715,7 +949,7 @@ export default function AdminDashboard() {
                   </div>
                 )}
                 {isEditingBlueprint && isBlueprintLocked(editingBlueprintId) && (
-                  <div style={{padding:'8px 12px',background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:6,color:'#92400e',fontSize:12,fontWeight:600,marginBottom:10}}>
+                  <div style={{padding:'8px 12px',background:'#fffbeb',border:'1px solid #fcd34d',borderRadius:10,color:'#92400e',fontSize:12,fontWeight:600,marginBottom:10}}>
                     Locked: A published or completed exam is using this blueprint. Cancel or delete that exam to edit.
                   </div>
                 )}
@@ -726,6 +960,11 @@ export default function AdminDashboard() {
                   <div><label style={lbl}>Description</label>
                     <input value={blueprintForm.description} onChange={e=>setBlueprintForm(f=>({...f,description:e.target.value}))} style={inp} placeholder="Optional"/>
                   </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <input id="optShuffle" type="checkbox" checked={!!blueprintForm.optionShuffle} onChange={e=>setBlueprintForm(f=>({...f,optionShuffle:e.target.checked}))} />
+                    <label htmlFor="optShuffle" style={{fontSize:13,fontWeight:700,color:'var(--text-secondary)',margin:0}}>Shuffle options per question</label>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:8}}>When enabled, answer options will be shuffled for each candidate.</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                     <div><label style={lbl}>Duration (minutes)</label>
                       <input type="number" min={5} value={blueprintForm.durationMinutes} onChange={e=>setBlueprintForm(f=>({...f,durationMinutes:Number(e.target.value)}))} style={inp}/>
@@ -739,21 +978,21 @@ export default function AdminDashboard() {
                       <label style={{...lbl,marginBottom:0}}>Subject Entries</label>
                       <button type="button"
                         onClick={()=>setBlueprintForm(f=>({...f,entries:[...f.entries,{subjectId:'',sectionName:'',questionCount:10,marksPerQuestion:1,negativeMarks:0.25}]}))}
-                        style={{padding:'4px 12px',background:'var(--primary-light)',color:'var(--primary)',border:'1px solid var(--primary)',borderRadius:5,fontWeight:700,cursor:'pointer',fontSize:12}}>
+                        style={{padding:'4px 12px',background:'var(--primary-light)',color:'var(--primary)',border:'1px solid var(--primary)',borderRadius:10,fontWeight:700,cursor:'pointer',fontSize:12}}>
                         + Add Subject
                       </button>
                     </div>
                     {blueprintForm.entries.length===0 && (
-                      <div style={{padding:'14px',background:'#f9fafb',border:'1px dashed var(--border)',borderRadius:6,textAlign:'center',fontSize:13,color:'var(--text-muted)'}}>
+                      <div style={{padding:'14px',background:'#f9fafb',border:'1px dashed var(--border)',borderRadius:10,textAlign:'center',fontSize:13,color:'var(--text-muted)'}}>
                         Click "+ Add Subject" to add subjects to this blueprint
                       </div>
                     )}
                     {blueprintForm.entries.map((entry,i)=>(
-                      <div key={i} style={{border:'1px solid var(--border)',borderRadius:7,padding:12,marginBottom:8,background:'#fafafa'}}>
+                      <div key={i} style={{border:'1px solid var(--border)',borderRadius:10,padding:12,marginBottom:8,background:'#fafafa'}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                           <span style={{fontSize:12,fontWeight:700,color:'var(--primary)'}}>Entry {i+1}</span>
                           <button type="button" onClick={()=>setBlueprintForm(f=>({...f,entries:f.entries.filter((_,j)=>j!==i)}))}
-                            style={{border:'none',background:'transparent',color:'var(--danger)',cursor:'pointer',fontSize:16}}>✕</button>
+                            style={{border:'none',background:'transparent',color:'var(--danger)',cursor:'pointer',fontSize:13,fontWeight:700}}>Remove</button>
                         </div>
                         <div style={{marginBottom:8}}>
                           <label style={lbl}>Subject</label>
@@ -781,14 +1020,14 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         {entry.questionCount>0 && entry.marksPerQuestion>0 && (
-                          <div style={{marginTop:6,fontSize:12,color:'var(--text-muted)',background:'#f0f9ff',padding:'4px 10px',borderRadius:4}}>
+                          <div style={{marginTop:6,fontSize:12,color:'var(--text-muted)',background:'#f0f9ff',padding:'4px 10px',borderRadius:10}}>
                             {entry.questionCount} × {entry.marksPerQuestion} = <b>{entry.questionCount*entry.marksPerQuestion}</b> marks
                           </div>
                         )}
                       </div>
                     ))}
                     {blueprintForm.entries.length>0 && (
-                      <div style={{padding:'8px 12px',background:'var(--primary-light)',borderRadius:6,fontSize:13,fontWeight:700,color:'var(--primary)',display:'flex',justifyContent:'space-between'}}>
+                      <div style={{padding:'8px 12px',background:'var(--primary-light)',borderRadius:10,fontSize:13,fontWeight:700,color:'var(--primary)',display:'flex',justifyContent:'space-between'}}>
                         <span>Total Questions: {blueprintForm.entries.reduce((s,e)=>s+(e.questionCount||0),0)}</span>
                         <span>Total Marks: {blueprintForm.entries.reduce((s,e)=>s+(e.questionCount||0)*(e.marksPerQuestion||0),0)}</span>
                       </div>
@@ -796,27 +1035,27 @@ export default function AdminDashboard() {
                   </div>
                   <div style={{display:'flex',gap:10,alignItems:'center'}}>
                     <button type="submit" disabled={blueprintForm.entries.length===0||blueprintForm.entries.some(e=>!e.subjectId)||isBlueprintLocked(editingBlueprintId)}
-                      style={{padding:'11px',background:'var(--primary)',color:'#fff',border:'none',borderRadius:6,fontWeight:700,cursor:'pointer',
+                      style={{padding:'11px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:700,cursor:'pointer',
                         opacity:(blueprintForm.entries.length===0||blueprintForm.entries.some(e=>!e.subjectId)||isBlueprintLocked(editingBlueprintId))?0.5:1}}>
                       {isEditingBlueprint ? 'Update Blueprint' : 'Create Blueprint'}
                     </button>
                     {isEditingBlueprint && (
                       <button type="button" onClick={handleCancelBlueprintEdit}
-                        style={{padding:'10px 12px',background:'#fff',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:6,fontWeight:600,cursor:'pointer'}}>
+                        style={{padding:'10px 12px',background:'#fff',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:10,fontWeight:600,cursor:'pointer'}}>
                         Cancel
                       </button>
                     )}
                   </div>
                 </form>
               </div>
-              <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+              <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
                 {!selectedBlueprint ? (
                   <>
                     <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}>
                       <h3 style={{fontSize:15,fontWeight:700}}>Blueprints ({blueprints.length})</h3>
                     </div>
                     <div style={{maxHeight:600,overflowY:'auto'}}>
-                      {blueprints.length===0 && <div style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}><div style={{fontSize:32,marginBottom:10}}>🗺</div>No blueprints yet.</div>}
+                      {blueprints.length===0 && <div style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}>No blueprints yet.</div>}
                       {blueprints.map(b=>(
                         <div key={b.id} style={{padding:'14px 20px',borderBottom:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                           <div>
@@ -824,9 +1063,9 @@ export default function AdminDashboard() {
                             <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{b.durationMinutes} min | {b.totalMarks} marks | {b.entries?.length||0} subject(s)</div>
                           </div>
                           <div style={{display:'flex',gap:6}}>
-                            <button onClick={()=>setSelectedBlueprint(b)} style={{padding:'5px 12px',border:'1px solid var(--border)',background:'#fff',borderRadius:5,cursor:'pointer',fontSize:12,fontWeight:600}}>👁 View</button>
-                            <button onClick={()=>handleEditBlueprint(b)} style={{padding:'5px 12px',border:'1px solid #bfdbfe',background:'#eff6ff',color:'#1d4ed8',borderRadius:5,cursor:'pointer',fontSize:12,fontWeight:600}}>✏ Edit</button>
-                            <button onClick={()=>handleDeleteBlueprint(b.id)} style={{padding:'5px 12px',background:'#fef2f2',color:'var(--danger)',border:'1px solid #fecaca',borderRadius:5,cursor:'pointer',fontSize:12,fontWeight:600}}>🗑 Delete</button>
+                            <button onClick={()=>setSelectedBlueprint(b)} style={{padding:'5px 12px',border:'1px solid var(--border)',background:'#fff',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}> View</button>
+                            <button onClick={()=>handleEditBlueprint(b)} style={{padding:'5px 12px',border:'1px solid #b8eef2',background:'var(--brand-teal-light)',color:'var(--primary)',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}> Edit</button>
+                            <button onClick={()=>handleDeleteBlueprint(b.id)} style={{padding:'5px 12px',background:'#fef2f2',color:'var(--danger)',border:'1px solid #fecaca',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}> Delete</button>
                           </div>
                         </div>
                       ))}
@@ -836,17 +1075,17 @@ export default function AdminDashboard() {
                   <>
                     <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <h3 style={{fontSize:15,fontWeight:700}}>{selectedBlueprint.name}</h3>
-                      <button onClick={()=>setSelectedBlueprint(null)} style={{border:'none',background:'transparent',fontSize:18,cursor:'pointer',color:'var(--text-muted)'}}>✖</button>
+                      <button onClick={()=>setSelectedBlueprint(null)} style={{border:'none',background:'transparent',fontSize:13,cursor:'pointer',color:'var(--text-muted)',fontWeight:700}}>Close</button>
                     </div>
                     <div style={{padding:20}}>
                       {selectedBlueprint.description && <p style={{color:'var(--text-muted)',marginBottom:12,fontSize:13}}>{selectedBlueprint.description}</p>}
                       <div style={{display:'flex',gap:20,marginBottom:16,fontSize:13,alignItems:'center',flexWrap:'wrap'}}>
-                        <span>⏱ <b>{selectedBlueprint.durationMinutes} min</b></span>
-                        <span>🏆 <b>{selectedBlueprint.totalMarks} marks</b></span>
-                        <span>📚 <b>{selectedBlueprint.entries?.length||0} subject(s)</b></span>
+                        <span> <b>{selectedBlueprint.durationMinutes} min</b></span>
+                        <span> <b>{selectedBlueprint.totalMarks} marks</b></span>
+                        <span> <b>{selectedBlueprint.entries?.length||0} subject(s)</b></span>
                         <button onClick={()=>handleEditBlueprint(selectedBlueprint)}
-                          style={{padding:'5px 10px',border:'1px solid #bfdbfe',background:'#eff6ff',color:'#1d4ed8',borderRadius:5,cursor:'pointer',fontSize:12,fontWeight:600}}>
-                          ✏ Edit Blueprint
+                          style={{padding:'5px 10px',border:'1px solid #b8eef2',background:'var(--brand-teal-light)',color:'var(--primary)',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                          Edit Blueprint
                         </button>
                       </div>
                       <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
@@ -889,7 +1128,7 @@ export default function AdminDashboard() {
             <div>
               <h2 style={{fontSize:22,fontWeight:700,marginBottom:20}}>Exam Management</h2>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-                <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+                <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
                   <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}><h3 style={{fontSize:15,fontWeight:700}}>Create New Exam</h3></div>
                   <form onSubmit={handleCreateExam} style={{padding:20,display:'flex',flexDirection:'column',gap:12}}>
                     <div><label style={lbl}>Title</label><input value={examForm.title} onChange={e=>setExamForm(f=>({...f,title:e.target.value}))} required style={inp}/></div>
@@ -913,10 +1152,10 @@ export default function AdminDashboard() {
                       <div><label style={lbl}>End Time</label><input type="datetime-local" value={examForm.scheduledEnd} onChange={e=>setExamForm(f=>({...f,scheduledEnd:e.target.value}))} required style={inp}/></div>
                     </div>
                     <div><label style={lbl}>Duration (minutes)</label><input type="number" value={examForm.durationMinutes} min={10} disabled={!!examForm.blueprintId} style={inp}/></div>
-                    <button type="submit" style={{padding:'10px',background:'var(--primary)',color:'#fff',border:'none',borderRadius:5,fontWeight:600,cursor:'pointer'}}>Create Exam</button>
+                    <button type="submit" style={{padding:'10px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:600,cursor:'pointer'}}>Create Exam</button>
                   </form>
                 </div>
-                <div style={{background:'#fff',borderRadius:10,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
+                <div style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',overflow:'hidden'}}>
                   <div style={{padding:'14px 20px',background:'var(--bg-panel)',borderBottom:'1px solid var(--border)'}}><h3 style={{fontSize:15,fontWeight:700}}>All Exams</h3></div>
                   <div style={{maxHeight:420,overflowY:'auto'}}>
                     {loading ? <div style={{padding:30,display:'flex',justifyContent:'center'}}><Spinner/></div>
@@ -931,18 +1170,18 @@ export default function AdminDashboard() {
                         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                           {e.status==='DRAFT' && (
                             <button onClick={()=>handlePublish(e.id)}
-                              style={{padding:'5px 14px',background:'var(--success)',color:'#fff',border:'none',borderRadius:4,fontWeight:600,cursor:'pointer',fontSize:12}}>
+                              style={{padding:'5px 14px',background:'var(--success)',color:'#fff',border:'none',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
                               Publish Exam
                             </button>
                           )}
                           {e.status==='PUBLISHED' && (
                             <>
                               <button onClick={()=>handleRescheduleExam(e)}
-                                style={{padding:'5px 12px',background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe',borderRadius:4,fontWeight:600,cursor:'pointer',fontSize:12}}>
+                                style={{padding:'5px 12px',background:'var(--brand-teal-light)',color:'var(--primary)',border:'1px solid #b8eef2',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
                                 Reschedule
                               </button>
                               <button onClick={()=>handleCancelExam(e)}
-                                style={{padding:'5px 12px',background:'#fef2f2',color:'#991b1b',border:'1px solid #fecaca',borderRadius:4,fontWeight:600,cursor:'pointer',fontSize:12}}>
+                                style={{padding:'5px 12px',background:'#fef2f2',color:'#991b1b',border:'1px solid #fecaca',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
                                 Cancel
                               </button>
                             </>
@@ -950,7 +1189,7 @@ export default function AdminDashboard() {
                           {e.status!=='PUBLISHED' && (
                             <button onClick={()=>handleDeleteExam(e)}
                               style={{padding:'2px 0',background:'transparent',color:'var(--danger)',border:'none',fontWeight:600,cursor:'pointer',fontSize:12,display:'inline-flex',alignItems:'center',gap:6}}>
-                              🗑 Delete
+                               Delete
                             </button>
                           )}
                         </div>
@@ -961,6 +1200,9 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* ── DELETE ATTEMPTS ── */}
+          {tab === 'Exam Control' && <DeleteAttemptsTab flash={flash} />}
 
           {/* ── RESULTS ── */}
           {tab === 'Results' && <ExamResultsViewer />}

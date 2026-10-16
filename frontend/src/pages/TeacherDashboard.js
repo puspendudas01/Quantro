@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getSubjects, getQuestions } from '../api/adminApi';
-import BrandLogo from '../components/BrandLogo';
+import { clearQuestionBankBySubject, getSubjects, getQuestions } from '../api/adminApi';
+import Topbar from '../components/Topbar';
 import api from '../api/axiosConfig';
 import ExamResultsViewer from '../components/ExamResultsViewer';
 import Spinner from '../components/Spinner';
@@ -33,7 +33,7 @@ function ImageThumb({ file, onRemove, label }) {
       <img src={url} alt={label} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 4, border: '1px solid #cbd5e1' }} />
       <button type="button" onClick={onRemove}
         style={{ fontSize: 10, padding: '1px 6px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 3, cursor: 'pointer' }}>
-        ✕ Remove
+        Remove
       </button>
     </div>
   );
@@ -42,6 +42,9 @@ function ImageThumb({ file, onRemove, label }) {
 export default function TeacherDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const roleBadge = user?.role === 'ADMIN'
+    ? { label: 'ADMIN', bg: '#fef3c7', color: '#92400e' }
+    : { label: 'TEACHER', bg: '#e0e7ff', color: '#4338ca' };
 
   const [subjects, setSubjects] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState(null);
@@ -82,6 +85,8 @@ export default function TeacherDashboard() {
   const [subjectMsg, setSubjectMsg] = useState('');
   const subjectExcelInputRef = useRef(null);
   const subjectImageZipInputRef = useRef(null);
+  const [clearingBank, setClearingBank] = useState(false);
+  const [bankAction, setBankAction] = useState({ text: '', ok: true });
 
   useEffect(() => {
     const handleBack = async () => {
@@ -90,7 +95,7 @@ export default function TeacherDashboard() {
         logout,
         onError: () => console.warn('Logout failed')
       });
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     };
 
     window.history.pushState(null, '', window.location.href);
@@ -116,6 +121,7 @@ export default function TeacherDashboard() {
     resetImages();
     setUploadSuccess(false);
     setError('');
+    setBankAction({ text: '', ok: true });
     if (subj) loadQuestions(subj);
   };
 
@@ -220,7 +226,7 @@ export default function TeacherDashboard() {
       const res = await api.post('/questions/excel', formData);
       const data = res?.data || {};
 
-      setMsg('✓ ' + (data.message || 'Questions uploaded successfully.'));
+      setMsg('Success: ' + (data.message || 'Questions uploaded successfully.'));
       setQuestionFile(null);
       setImageZipFile(null);
       if (excelInputRef.current) excelInputRef.current.value = '';
@@ -263,7 +269,7 @@ export default function TeacherDashboard() {
       const res = await api.post('/questions/excel', formData);
       const data = res?.data || {};
 
-      setSubjectMsg('✓ ' + (data.message || 'Questions uploaded successfully.'));
+      setSubjectMsg('Success: ' + (data.message || 'Questions uploaded successfully.'));
       setSubjectExcelFile(null);
       setSubjectImageZipFile(null);
       if (subjectExcelInputRef.current) subjectExcelInputRef.current.value = '';
@@ -275,7 +281,42 @@ export default function TeacherDashboard() {
     }
   };
 
-  const inp = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, boxSizing: 'border-box' };
+  const handleClearQuestionBank = async () => {
+    if (!selectedSubject) {
+      setError('Select a subject first.');
+      return;
+    }
+
+    const typed = window.prompt(
+      `This permanently deletes all questions from ${selectedSubject.name}.\nType DELETE to confirm.`
+    );
+
+    if (typed !== 'DELETE') {
+      if (typed !== null) {
+        setBankAction({ text: 'Clear cancelled. Confirmation text did not match.', ok: false });
+      }
+      return;
+    }
+
+    try {
+      setClearingBank(true);
+      setError('');
+      setBankAction({ text: '', ok: true });
+      const res = await clearQuestionBankBySubject(selectedSubject.id);
+      const deleted = res?.data?.data?.deleted ?? 0;
+      setQuestions([]);
+      setUploadSuccess(false);
+      setMsg('');
+      setSubjectMsg('');
+      setBankAction({ text: `Question bank cleared. ${deleted} question${deleted === 1 ? '' : 's'} deleted from database.`, ok: true });
+    } catch (err) {
+      setBankAction({ text: 'Failed to clear question bank: ' + (err.message || 'Unknown error'), ok: false });
+    } finally {
+      setClearingBank(false);
+    }
+  };
+
+  const inp = { width: '100%', padding: '10px 14px', border: '1.5px solid var(--border-input)', borderRadius: 10, fontSize: 13, boxSizing: 'border-box' };
   const lbl = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 };
   const sec = { marginBottom: 14 };
 
@@ -287,6 +328,46 @@ export default function TeacherDashboard() {
       <div style={{ background: '#fff', borderRadius: 10, boxShadow: 'var(--shadow-sm)' }}>
         <div style={{ padding: 20 }}>
           <h3 style={{ marginBottom: 16, fontSize: 15 }}>Upload Question — {selectedSubject.name}</h3>
+
+          <div style={{ marginBottom: 16, padding: 12, borderRadius: 8, border: '1px solid #fecaca', background: '#fff7f7' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
+              Clear Question Bank
+            </div>
+            <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 8 }}>
+              Permanently deletes all questions for this subject from the database.
+            </div>
+            <button
+              type="button"
+              onClick={handleClearQuestionBank}
+              disabled={clearingBank}
+              style={{
+                padding: '7px 12px',
+                background: '#b91c1c',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 10,
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: clearingBank ? 'not-allowed' : 'pointer',
+                opacity: clearingBank ? 0.65 : 1
+              }}>
+              {clearingBank ? 'Clearing...' : 'Clear All Questions'}
+            </button>
+            {bankAction.text && (
+              <div style={{
+                marginTop: 8,
+                padding: '8px 10px',
+                borderRadius: 10,
+                border: bankAction.ok ? '1px solid #bbf7d0' : '1px solid #fecaca',
+                background: bankAction.ok ? '#f0fdf4' : '#fef2f2',
+                color: bankAction.ok ? '#166534' : '#b91c1c',
+                fontSize: 12,
+                fontWeight: 600
+              }}>
+                {bankAction.text}
+              </div>
+            )}
+          </div>
 
           <form onSubmit={handleUpload}>
             {/* Question text */}
@@ -314,13 +395,13 @@ export default function TeacherDashboard() {
             <div style={sec}>
               <label style={lbl}>Options (text and/or image per option)</label>
               {form.options.map((opt, i) => (
-                <div key={i} style={{ marginBottom: 10, padding: 10, border: '1px solid var(--border)', borderRadius: 6, background: form.correctOptionIndex === i ? '#f0fdf4' : '#fafafa' }}>
+                <div key={i} style={{ marginBottom: 10, padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: form.correctOptionIndex === i ? '#f0fdf4' : '#fafafa' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <input type="radio" name="correct" checked={form.correctOptionIndex === i}
                       onChange={() => setForm(f => ({ ...f, correctOptionIndex: i }))}
                       style={{ accentColor: 'var(--primary)' }} />
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--primary)' }}>
-                      {String.fromCharCode(65 + i)} {form.correctOptionIndex === i ? '✓ Correct' : ''}
+                      {String.fromCharCode(65 + i)} {form.correctOptionIndex === i ? 'Correct' : ''}
                     </span>
                   </div>
                   <input value={opt} placeholder={`Option ${String.fromCharCode(65 + i)} text`}
@@ -362,18 +443,18 @@ export default function TeacherDashboard() {
             </div>
 
             {uploadSuccess && (
-              <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 5, fontSize: 13, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
-                ✓ Question uploaded successfully!
+              <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 10, fontSize: 13, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                Question uploaded successfully!
               </div>
             )}
             {error && (
-              <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 5, fontSize: 13, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+              <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 10, fontSize: 13, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
                 {error}
               </div>
             )}
 
             <button type="submit"
-              style={{ width: '100%', padding: '10px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '10px', background: 'var(--primary-gradient)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
               Upload Question
             </button>
           </form>
@@ -449,22 +530,15 @@ export default function TeacherDashboard() {
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
 
       {/* NAVBAR */}
-      <div style={{ background: '#fff', borderBottom: '1px solid var(--border)', height: 56, display: 'flex', alignItems: 'center', padding: '0 0px', justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BrandLogo variant="text" width={140} />
-          <span style={{ marginLeft: 8, padding: '2px 8px', background: '#e0e7ff', color: '#4338ca', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>TEACHER</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Welcome, <strong>{user?.fullName}</strong></span>
-          <button onClick={async () => {
-            await runLogoutFlow({ apiClient: api, logout, onError: () => console.warn('Logout failed') });
-            navigate('/login');
-          }}
-            style={{ padding: '6px 14px', border: '1px solid var(--border)', borderRadius: 6, background: '#fff', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>
-            Sign out
+      <Topbar
+        badge={<span style={{ marginLeft: 8, padding: '2px 8px', background: roleBadge.bg, color: roleBadge.color, borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{roleBadge.label}</span>}
+        extra={user?.role === 'ADMIN' && (
+          <button onClick={() => navigate('/admin', { replace: true })}
+            style={{ padding: '6px 14px', border: '1px solid var(--border-input)', borderRadius: 10, background: '#fff', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            Back to Admin
           </button>
-        </div>
-      </div>
+        )}
+      />
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
@@ -482,6 +556,7 @@ export default function TeacherDashboard() {
             style={{
               width: '100%', textAlign: 'left', padding: '11px 16px',
               border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+              borderLeft: teacherTab === 'Upload' ? '3px solid var(--accent)' : '3px solid transparent',
               background: teacherTab === 'Upload' ? 'var(--primary-light)' : 'transparent',
               color: teacherTab === 'Upload' ? 'var(--primary)' : 'var(--text-primary)',
               fontWeight: teacherTab === 'Upload' ? 700 : 500, fontSize: 13,
@@ -523,6 +598,7 @@ export default function TeacherDashboard() {
                   style={{
                     width: '100%', textAlign: 'left', padding: '9px 16px 9px 36px',
                     border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+                    borderLeft: selectedSubject?.id === s.id ? '3px solid var(--accent)' : '3px solid transparent',
                     background: selectedSubject?.id === s.id ? 'var(--primary-light)' : 'transparent',
                     color: selectedSubject?.id === s.id ? 'var(--primary)' : 'var(--text-primary)',
                     fontWeight: selectedSubject?.id === s.id ? 700 : 400, fontSize: 12,
@@ -542,11 +618,12 @@ export default function TeacherDashboard() {
             style={{
               width: '100%', textAlign: 'left', padding: '11px 16px',
               border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+              borderLeft: teacherTab === 'QuestionBank' ? '3px solid var(--accent)' : '3px solid transparent',
               background: teacherTab === 'QuestionBank' ? 'var(--primary-light)' : 'transparent',
               color: teacherTab === 'QuestionBank' ? 'var(--primary)' : 'var(--text-primary)',
               fontWeight: teacherTab === 'QuestionBank' ? 700 : 500, fontSize: 13,
             }}>
-            📚 Question Bank
+            Question Bank
           </button>
 
 
@@ -556,11 +633,12 @@ export default function TeacherDashboard() {
             style={{
               width: '100%', textAlign: 'left', padding: '11px 16px',
               border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer',
+              borderLeft: teacherTab === 'Results' ? '3px solid var(--accent)' : '3px solid transparent',
               background: teacherTab === 'Results' ? 'var(--primary-light)' : 'transparent',
               color: teacherTab === 'Results' ? 'var(--primary)' : 'var(--text-primary)',
               fontWeight: teacherTab === 'Results' ? 700 : 500, fontSize: 13,
             }}>
-            🏆 Results
+            Results
           </button>
         </div>
 
@@ -575,7 +653,6 @@ export default function TeacherDashboard() {
             <div>
               {!selectedSubject ? (
                 <div style={{ textAlign: 'center', marginTop: 80 }}>
-                  <div style={{ fontSize: 40, marginBottom: 16 }}>📚</div>
                   <h3>Select a subject to manage questions</h3>
                   <div style={{ marginTop: 16, display: 'inline-flex', gap: 10, alignItems: 'center' }}>
                     <select
@@ -607,8 +684,8 @@ export default function TeacherDashboard() {
               {/* ── Sub-tab pill row ── */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
                 {[
-                  { key: 'bulk',    label: '📂  Question Bank Upload' },
-                  { key: 'subject', label: '📚  Subject-wise Upload'  },
+                  { key: 'bulk',    label: 'Question Bank Upload' },
+                  { key: 'subject', label: 'Subject-wise Upload'  },
                 ].map(t => (
                   <button
                     key={t.key}
@@ -683,8 +760,8 @@ export default function TeacherDashboard() {
                       onClick={handleUploadQuestions}
                       disabled={!questionFile}
                       style={{
-                        padding: '9px 20px', background: 'var(--primary)', color: '#fff',
-                        border: 'none', borderRadius: 6, fontWeight: 600,
+                        padding: '9px 20px', background: 'var(--primary-gradient)', color: '#fff',
+                        border: 'none', borderRadius: 10, fontWeight: 600,
                         cursor: questionFile ? 'pointer' : 'not-allowed',
                         opacity: questionFile ? 1 : 0.5, fontSize: 13,
                       }}>
@@ -692,10 +769,10 @@ export default function TeacherDashboard() {
                     </button>
                     {msg && (
                       <div style={{
-                        marginTop: 12, padding: '8px 14px', borderRadius: 6, fontSize: 13,
-                        background: msg.startsWith('✓') ? '#f0fdf4' : '#fef2f2',
-                        color: msg.startsWith('✓') ? 'var(--success)' : 'var(--danger)',
-                        border: '1px solid ' + (msg.startsWith('✓') ? '#bbf7d0' : '#fecaca'),
+                        marginTop: 12, padding: '8px 14px', borderRadius: 10, fontSize: 13,
+                        background: msg.startsWith('Success:') ? '#f0fdf4' : '#fef2f2',
+                        color: msg.startsWith('Success:') ? 'var(--success)' : 'var(--danger)',
+                        border: '1px solid ' + (msg.startsWith('Success:') ? '#bbf7d0' : '#fecaca'),
                       }}>
                         {msg}
                       </div>
@@ -791,8 +868,8 @@ export default function TeacherDashboard() {
                           onClick={handleSubjectExcelUpload}
                           disabled={!subjectExcelFile}
                           style={{
-                            padding: '9px 20px', background: 'var(--primary)', color: '#fff',
-                            border: 'none', borderRadius: 6, fontWeight: 600,
+                            padding: '9px 20px', background: 'var(--primary-gradient)', color: '#fff',
+                            border: 'none', borderRadius: 10, fontWeight: 600,
                             cursor: subjectExcelFile ? 'pointer' : 'not-allowed',
                             opacity: subjectExcelFile ? 1 : 0.5, fontSize: 13,
                           }}>
@@ -800,10 +877,10 @@ export default function TeacherDashboard() {
                         </button>
                         {subjectMsg && (
                           <div style={{
-                            marginTop: 12, padding: '8px 14px', borderRadius: 6, fontSize: 13,
-                            background: subjectMsg.startsWith('✓') ? '#f0fdf4' : '#fef2f2',
-                            color: subjectMsg.startsWith('✓') ? 'var(--success)' : 'var(--danger)',
-                            border: '1px solid ' + (subjectMsg.startsWith('✓') ? '#bbf7d0' : '#fecaca'),
+                            marginTop: 12, padding: '8px 14px', borderRadius: 10, fontSize: 13,
+                            background: subjectMsg.startsWith('Success:') ? '#f0fdf4' : '#fef2f2',
+                            color: subjectMsg.startsWith('Success:') ? 'var(--success)' : 'var(--danger)',
+                            border: '1px solid ' + (subjectMsg.startsWith('Success:') ? '#bbf7d0' : '#fecaca'),
                           }}>
                             {subjectMsg}
                           </div>
@@ -815,7 +892,6 @@ export default function TeacherDashboard() {
                   {/* Placeholder when no subject chosen */}
                   {!selectedSubject ? (
                     <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-                      <div style={{ fontSize: 32, marginBottom: 12 }}>📚</div>
                       <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
                         Select a subject to manage its questions
                       </div>

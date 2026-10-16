@@ -69,15 +69,15 @@ function FullscreenWarningModal({ exitsRemaining, graceSeconds, onReturnToFullsc
         )}
         <div style={{
           fontSize: 48, fontWeight: 800, fontFamily: 'monospace',
-          color: countdown <= 5 ? '#dc2626' : '#1e3a5f', marginBottom: 24
+          color: countdown <= 5 ? '#dc2626' : 'var(--brand-navy)', marginBottom: 24
         }}>
           {String(countdown).padStart(2, '0')}s
         </div>
         <button
           onClick={onReturnToFullscreen}
           style={{
-            width: '100%', padding: '13px', background: '#1e3a5f', color: '#fff',
-            border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 16, cursor: 'pointer'
+            width: '100%', padding: '13px', background: 'var(--brand-navy)', color: '#fff',
+            border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 16, cursor: 'pointer'
           }}>
           🔲 Return to Fullscreen
         </button>
@@ -95,7 +95,7 @@ export default function ExamPage() {
   const { user }   = useAuth();
 
   const [session,     setSession]     = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
   const [currentIdx,  setCurrentIdx]  = useState(0);
   const [answers,     setAnswers]     = useState({});
@@ -106,6 +106,8 @@ export default function ExamPage() {
   const [submitted,   setSubmitted]   = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [snackbar,    setSnackbar]    = useState('');
+  const [showInstructions, setShowInstructions] = useState(true);
+  const [startingExam, setStartingExam] = useState(false);
 
   /* ── FULLSCREEN STATE ────────────────────────────────────────── */
   const [fsWarning,   setFsWarning]   = useState(null);  // { graceSeconds, exitsRemaining }
@@ -138,27 +140,40 @@ export default function ExamPage() {
     return next;
   }, []);
 
-  /* ── LOAD SESSION ───────────────────────────────────────────── */
-  useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+  const handleStartExam = useCallback(async () => {
+    if (startingExam || !examId) return;
 
-    startExam(examId)
-      .then(res => {
-        const s = res.data.data || res.data;
-        setSession(s);
-        if (s.savedAnswers)  setAnswers(s.savedAnswers);
-        if (s.markedForReview) setMarked(s.markedForReview);
-        if (s.sections)      setActiveSection(Object.keys(s.sections)[0]);
-        setVisited(new Set());
-      })
-      .catch(err => {
-        // Release stale lock if backend rejects start (e.g. already submitted).
-        localStorage.removeItem('exam_active');
-        setError(err.response?.data?.message || 'Failed to start exam.');
-      })
-      .finally(() => setLoading(false));
-  }, [examId]);
+    setStartingExam(true);
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await startExam(examId);
+      const s = res.data.data || res.data;
+      setSession(s);
+      setShowInstructions(false);
+      setVisited(new Set());
+      if (s.savedAnswers) setAnswers(s.savedAnswers);
+      if (s.markedForReview) setMarked(s.markedForReview);
+      if (s.sections) setActiveSection(Object.keys(s.sections)[0]);
+      localStorage.setItem('exam_active', 'true');
+
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (e) {
+        console.warn('Fullscreen request failed:', e);
+      }
+    } catch (err) {
+      localStorage.removeItem('exam_active');
+      setShowInstructions(true);
+      setError(err.response?.data?.message || 'Failed to start exam.');
+    } finally {
+      setLoading(false);
+      setStartingExam(false);
+    }
+  }, [examId, startingExam]);
 
   /* ── ENTER FULLSCREEN ON SESSION LOAD ───────────────────────── */
   useEffect(() => {
@@ -307,6 +322,120 @@ export default function ExamPage() {
     return session.sections[activeSection] || [];
   };
 
+  if (showInstructions) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 980,
+        background: '#fff',
+        borderRadius: 20,
+        boxShadow: '0 24px 80px rgba(15, 23, 42, 0.12)',
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          background: 'linear-gradient(90deg, #002244 0%, #001a33 100%)',
+          color: '#fff',
+          padding: '26px 28px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <BrandLogo size={34} />
+            <div>
+              <div style={{ fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.8 }}>Exam Instructions</div>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>Before You Begin</h1>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '28px 28px 20px', color: '#1f2937' }}>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>General Rules</h2>
+            <ol style={{ margin: 0, paddingLeft: 22, lineHeight: 1.9, fontSize: 15, color: '#334155' }}>
+              <li>Read all instructions carefully before starting the examination.</li>
+              <li>The examination will begin only after you click “Start Exam.”</li>
+              <li>The timer will start immediately after the examination begins.</li>
+              <li>The examination will be automatically submitted when the allotted time expires.</li>
+              <li>Once the examination is submitted, answers cannot be modified.</li>
+            </ol>
+          </div>
+
+          <div style={{ marginBottom: 24, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: 18 }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800, color: '#991b1b' }}>Important</h2>
+            <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.9, fontSize: 15, color: '#7f1d1d' }}>
+              <li><strong>Do not refresh, close, or navigate away from the examination window.</strong></li>
+              <li><strong>Right-click is disabled during the examination.</strong></li>
+              <li><strong>Copy, cut, and paste operations are disabled.</strong></li>
+              <li><strong>Don’t try any type of keyboard shortcut. This may cause a violation of the exam and the exam will be submitted.</strong></li>
+            </ul>
+          </div>
+
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Answer Submission</h2>
+            <ol style={{ margin: 0, paddingLeft: 22, lineHeight: 1.9, fontSize: 15, color: '#334155' }}>
+              <li>Your answer is saved when you select an option.</li>
+              <li>You may change your answer at any time before submission.</li>
+              <li>Selecting Submit Exam will permanently submit your examination.</li>
+              <li>After final submission, you cannot return to the examination.</li>
+              <li>If the timer reaches zero, the system will automatically submit your examination.</li>
+            </ol>
+          </div>
+
+          {error && (
+            <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', fontWeight: 600 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={handleStartExam}
+              disabled={startingExam}
+              style={{
+                flex: 1,
+                minWidth: 220,
+                padding: '14px 22px',
+                border: 'none',
+                borderRadius: 10,
+                cursor: startingExam ? 'not-allowed' : 'pointer',
+                background: 'var(--primary-gradient)',
+                color: '#fff',
+                fontSize: 16,
+                fontWeight: 800,
+                boxShadow: '0 10px 24px rgba(0, 34, 68, 0.25)',
+                opacity: startingExam ? 0.8 : 1
+              }}
+            >
+              {startingExam ? 'Starting Exam...' : 'Start Exam'}
+            </button>
+
+            <button
+              onClick={() => navigate('/student')}
+              style={{
+                padding: '14px 20px',
+                border: '1px solid #cbd5e1',
+                borderRadius: 10,
+                background: '#fff',
+                color: '#334155',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   /* ── LOADING / ERROR ─────────────────────────────────────────── */
   if (loading) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)' }}>
@@ -318,12 +447,12 @@ export default function ExamPage() {
 
   if (error) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:12, padding:40, maxWidth:480, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:40, maxWidth:480, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
         <div style={{ fontSize:48, marginBottom:16 }}>⚠️</div>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Cannot Load Exam</h2>
         <p style={{ color:'var(--text-muted)', marginBottom:24 }}>{error}</p>
         <button onClick={() => { localStorage.removeItem('exam_active'); navigate('/student'); }}
-          style={{ padding:'10px 24px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}>
+          style={{ padding:'10px 24px', background:'var(--primary-gradient)', color:'#fff', border:'none', borderRadius:10, fontWeight:600, cursor:'pointer' }}>
           Back to Dashboard
         </button>
       </div>
@@ -342,7 +471,7 @@ export default function ExamPage() {
         </p>
         <button
           onClick={handleBackToDashboard}
-          style={{ padding:'10px 20px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}
+          style={{ padding:'10px 20px', background:'var(--primary-gradient)', color:'#fff', border:'none', borderRadius:10, fontWeight:600, cursor:'pointer' }}
         >
           Back to Dashboard
         </button>
@@ -352,13 +481,13 @@ export default function ExamPage() {
 
   if (!session.questions?.length) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:12, padding:40, maxWidth:520, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:40, maxWidth:520, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>No Questions Available</h2>
         <p style={{ color:'var(--text-muted)', marginBottom:24 }}>
           This exam session has no questions assigned. Please contact your instructor.
         </p>
         <button onClick={() => { localStorage.removeItem('exam_active'); navigate('/student'); }}
-          style={{ padding:'10px 24px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}>
+          style={{ padding:'10px 24px', background:'var(--primary-gradient)', color:'#fff', border:'none', borderRadius:10, fontWeight:600, cursor:'pointer' }}>
           Back to Dashboard
         </button>
       </div>
@@ -388,7 +517,7 @@ export default function ExamPage() {
   const sectionNames = session.sectionOrder || (session.sections ? Object.keys(session.sections) : []);
 
   return (
-    <div style={{ minHeight:'100vh', background:'#f1f5f9', display:'flex', flexDirection:'column', userSelect:'none' }}>
+    <div style={{ minHeight:'100vh', background:'var(--bg)', display:'flex', flexDirection:'column', userSelect:'none' }}>
 
       {/* FULLSCREEN WARNING MODAL */}
       {fsWarning && (
@@ -401,12 +530,12 @@ export default function ExamPage() {
 
 
       {/* TOP BAR */}
-      <div style={{ background:'#1e3a5f', color:'#fff', height:52, display:'flex', alignItems:'center', padding:'0 20px', justifyContent:'space-between', flexShrink:0, zIndex:100 }}>
+      <div style={{ background:'var(--brand-navy)', color:'#fff', height:52, display:'flex', alignItems:'center', padding:'0 20px', justifyContent:'space-between', flexShrink:0, zIndex:100 }}>
         <div style={{ fontWeight:700, fontSize:15, maxWidth:400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {session.examTitle}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.1)', padding:'6px 14px', borderRadius:6 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.1)', padding:'6px 14px', borderRadius:10 }}>
             <span style={{ fontSize:14 }}>⏱</span>
             <span style={{ fontFamily:'monospace', fontSize:18, fontWeight:700, letterSpacing:2,
               color: isCritical ? '#fca5a5' : isWarning ? '#fcd34d' : '#fff' }}>
@@ -567,26 +696,26 @@ export default function ExamPage() {
                   border:'1px solid '+(marked.includes(q.id)?'#f97316':'var(--border)'),
                   background:marked.includes(q.id)?'#fff7ed':'#fff',
                   color:marked.includes(q.id)?'#f97316':'var(--text-secondary)',
-                  borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13 }}>
+                  borderRadius:10, cursor:'pointer', fontWeight:600, fontSize:13 }}>
                 {marked.includes(q.id) ? ' Unmark' : ' Mark for Review'}
               </button>
               <button onClick={() => handleClear(q.id)}
                 style={{ padding:'8px 16px', border:'1px solid var(--border)', background:'#fff',
-                  color:'var(--text-secondary)', borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13 }}>
+                  color:'var(--text-secondary)', borderRadius:10, cursor:'pointer', fontWeight:600, fontSize:13 }}>
                 ✕ Clear
               </button>
             </div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setCurrentIdx(i => Math.max(0, i-1))} disabled={currentIdx===0}
                 style={{ padding:'8px 18px', border:'1px solid var(--border)', background:'#fff',
-                  color:'var(--text-secondary)', borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13,
+                  color:'var(--text-secondary)', borderRadius:10, cursor:'pointer', fontWeight:600, fontSize:13,
                   opacity:currentIdx===0?0.4:1 }}>
                 ← Prev
               </button>
               <button onClick={() => setCurrentIdx(i => Math.min(session.questions.length-1, i+1))}
                 disabled={currentIdx===session.questions.length-1}
-                style={{ padding:'8px 18px', background:'var(--primary)', color:'#fff', border:'none',
-                  borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13,
+                style={{ padding:'8px 18px', background:'var(--primary-gradient)', color:'#fff', border:'none',
+                  borderRadius:10, cursor:'pointer', fontWeight:600, fontSize:13,
                   opacity:currentIdx===session.questions.length-1?0.5:1 }}>
                 Next →
               </button>
@@ -598,7 +727,7 @@ export default function ExamPage() {
         <div style={{ width:260, background:'#fff', borderLeft:'1px solid var(--border)', display:'flex', flexDirection:'column', flexShrink:0 }}>
 
           {/* Candidate info */}
-          <div style={{ padding:'14px 16px', background:'#1e3a5f', color:'#fff' }}>
+          <div style={{ padding:'14px 16px', background:'var(--brand-navy)', color:'#fff' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <div style={{ width:38, height:38, borderRadius:'50%', background:'rgba(255,255,255,0.2)',
                 display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>
@@ -657,7 +786,7 @@ export default function ExamPage() {
                 return (
                   <button key={idx} onClick={() => setCurrentIdx(idx)}
                     style={{ aspectRatio:'1', background:s.bg, color:s.color,
-                      border:isCurrent?'2px solid #1e3a5f':'2px solid transparent',
+                      border:isCurrent?'2px solid var(--brand-navy)':'2px solid transparent',
                       borderRadius:6, fontWeight:700, fontSize:12, cursor:'pointer',
                       outline:isCurrent?'2px solid #93c5fd':'none', outlineOffset:1 }}>
                     {/* Per-section numbering: 1,2,3,... within each section */}
@@ -691,7 +820,7 @@ export default function ExamPage() {
       {showConfirm && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)',
           display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
-          <div style={{ background:'#fff', borderRadius:12, padding:32, maxWidth:440, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:32, maxWidth:440, width:'90%', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
             <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Submit Exam?</h2>
             <p style={{ color:'var(--text-muted)', marginBottom:20, lineHeight:1.6 }}>
               You are about to submit your exam. This action cannot be undone.
@@ -710,11 +839,11 @@ export default function ExamPage() {
             </div>
             <div style={{ display:'flex', gap:12 }}>
               <button onClick={() => setShowConfirm(false)}
-                style={{ flex:1, padding:'11px', border:'1px solid var(--border)', borderRadius:6, background:'#fff', fontWeight:600, cursor:'pointer', fontSize:14 }}>
+                style={{ flex:1, padding:'11px', border:'1px solid var(--border)', borderRadius:10, background:'#fff', fontWeight:600, cursor:'pointer', fontSize:14 }}>
                 Continue Exam
               </button>
               <button onClick={() => { setShowConfirm(false); doSubmit(); }} disabled={submitting}
-                style={{ flex:1, padding:'11px', background:'#e11d48', color:'#fff', border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                style={{ flex:1, padding:'11px', background:'#e11d48', color:'#fff', border:'none', borderRadius:10, fontWeight:700, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
                 {submitting ? <Spinner size={16} color="#fff" /> : null}
                 {submitting ? 'Submitting...' : 'Submit Now'}
               </button>

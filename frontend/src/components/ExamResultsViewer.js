@@ -281,7 +281,7 @@ export default function ExamResultsViewer() {
         loadingExams ? (
           <div style={{ display:'flex', justifyContent:'center', padding:50 }}><Spinner size={36} /></div>
         ) : exams.length === 0 ? (
-          <div style={{ background:'#fff', borderRadius:12, padding:48, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
+          <div style={{ background:'#fff', borderRadius:16, padding:48, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
             <div style={{ fontSize:40, marginBottom:12 }}>📋</div>
             <p style={{ color:'var(--text-muted)' }}>No exams with results yet.</p>
           </div>
@@ -292,12 +292,12 @@ export default function ExamResultsViewer() {
                 placeholder="Search exams..."
                 value={examSearch}
                 onChange={e => setExamSearch(e.target.value)}
-                style={{ padding:'8px 10px', border:'1px solid var(--border)', borderRadius:6, fontSize:13, width:240 }}
+                style={{ padding:'8px 10px', border:'1.5px solid var(--border-input)', borderRadius:10, fontSize:13, width:240 }}
               />
               <select
                 value={examStatus}
                 onChange={e => setExamStatus(e.target.value)}
-                style={{ padding:'8px 10px', border:'1px solid var(--border)', borderRadius:6, fontSize:13 }}
+                style={{ padding:'8px 10px', border:'1.5px solid var(--border-input)', borderRadius:10, fontSize:13 }}
               >
                 <option value="">All Status</option>
                 {['DRAFT','PUBLISHED','COMPLETED','CANCELLED'].map(s => (
@@ -306,14 +306,14 @@ export default function ExamResultsViewer() {
               </select>
             </div>
             {filteredExams.length === 0 ? (
-              <div style={{ background:'#fff', borderRadius:12, padding:40, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
+              <div style={{ background:'#fff', borderRadius:16, padding:40, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
                 <p style={{ color:'var(--text-muted)' }}>No exams match your filters.</p>
               </div>
             ) : (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16 }}>
                 {filteredExams.map(exam => (
               <div key={exam.id} onClick={() => selectExam(exam)}
-                style={{ background:'#fff', borderRadius:10, boxShadow:'var(--shadow-sm)', padding:20,
+                style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', padding:20,
                   cursor:'pointer', border:'2px solid transparent', transition:'border-color 0.15s',
                   ':hover': { borderColor:'var(--primary)' } }}
                 onMouseEnter={e => e.currentTarget.style.borderColor='var(--primary)'}
@@ -362,10 +362,10 @@ export default function ExamResultsViewer() {
                 disabled={loadingResults || evaluateLoading}
                 style={{
                   padding:'8px 14px',
-                  background:'#0f172a',
+                  background:'var(--brand-navy)',
                   color:'#fff',
                   border:'none',
-                  borderRadius:6,
+                  borderRadius:10,
                   fontWeight:700,
                   fontSize:12,
                   cursor:(loadingResults || evaluateLoading) ? 'not-allowed' : 'pointer',
@@ -382,7 +382,7 @@ export default function ExamResultsViewer() {
                   background:'#166534',
                   color:'#fff',
                   border:'none',
-                  borderRadius:6,
+                  borderRadius:10,
                   fontWeight:700,
                   fontSize:12,
                   cursor:(loadingResults || excelLoading || filteredResults.length === 0) ? 'not-allowed' : 'pointer',
@@ -397,17 +397,17 @@ export default function ExamResultsViewer() {
           {loadingResults ? (
             <div style={{ display:'flex', justifyContent:'center', padding:50 }}><Spinner size={36} /></div>
           ) : results.length === 0 ? (
-            <div style={{ background:'#fff', borderRadius:12, padding:40, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
+            <div style={{ background:'#fff', borderRadius:16, padding:40, textAlign:'center', boxShadow:'var(--shadow-sm)' }}>
               <p style={{ color:'var(--text-muted)', marginBottom:12 }}>No evaluated results for this exam yet.</p>
               <button
                 onClick={handleEvaluateExam}
                 disabled={evaluateLoading}
                 style={{
                   padding:'8px 14px',
-                  background:'#0f172a',
+                  background:'var(--brand-navy)',
                   color:'#fff',
                   border:'none',
-                  borderRadius:6,
+                  borderRadius:10,
                   fontWeight:700,
                   fontSize:12,
                   cursor:evaluateLoading ? 'not-allowed' : 'pointer',
@@ -418,7 +418,7 @@ export default function ExamResultsViewer() {
               </button>
             </div>
           ) : (
-            <div style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-sm)', overflow:'hidden' }}>
+            <div style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', overflow:'hidden' }}>
               <div style={{ padding:'12px 16px', background:'#f8fafc', borderBottom:'1px solid var(--border)' }}>
                 <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
                   <input
@@ -503,7 +503,7 @@ export default function ExamResultsViewer() {
                         {/* SUMMARY ROW */}
                         <tr
                           onClick={() => setExpandedRow(isExpanded ? null : r.attemptId)}
-                          style={{ cursor:'pointer', background: isExpanded ? '#f0f9ff' : (idx%2?'#fafafa':'#fff'),
+                          style={{ cursor:'pointer', background: isExpanded ? '#e0f9fb' : (idx%2?'#fafafa':'#fff'),
                             borderLeft: isExpanded ? '3px solid var(--primary)' : '3px solid transparent' }}>
                           <td style={{...cell, fontWeight:700, color:'var(--primary)', textAlign:'center'}}>{idx+1}</td>
                           <td style={{...cell, fontWeight:600}}>{r.studentName}</td>
@@ -537,8 +537,8 @@ export default function ExamResultsViewer() {
                               <button
                                 onClick={e => { e.stopPropagation(); handleDownloadPdf(r.attemptId); }}
                                 disabled={pdfLoading===r.attemptId}
-                                style={{ padding:'3px 10px', background:'#1e3a5f', color:'#fff', border:'none',
-                                  borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                                style={{ padding:'3px 10px', background:'var(--primary)', color:'#fff', border:'none',
+                                  borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer' }}>
                                 {pdfLoading===r.attemptId ? '…' : '⬇ PDF'}
                               </button>
                             </div>
@@ -548,8 +548,8 @@ export default function ExamResultsViewer() {
                         {/* EXPANDED DETAIL ROW */}
                         {isExpanded && (
                           <tr>
-                            <td colSpan={13} style={{ padding:'0', background:'#f0f9ff' }}>
-                              <div style={{ padding:'20px 24px', borderTop:'1px solid #bfdbfe', borderBottom:'1px solid #bfdbfe' }}>
+                            <td colSpan={13} style={{ padding:'0', background:'#e0f9fb' }}>
+                              <div style={{ padding:'20px 24px', borderTop:'1px solid #b8eef2', borderBottom:'1px solid #b8eef2' }}>
                                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
 
                                   {/* SUBJECT BREAKDOWN */}
@@ -558,19 +558,19 @@ export default function ExamResultsViewer() {
                                       Subject-wise Breakdown
                                     </h4>
                                     {Object.keys(r.subjectWiseBreakdown || {}).length === 0 ? (
-                                      <p style={{ fontSize:13, color:'var(--text-muted)' }}>No breakdown data.</p>
+                                       <p style={{ fontSize:13, color:'var(--text-muted)' }}>No breakdown data.</p>
                                     ) : (
                                       <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                                         <thead>
-                                          <tr style={{ background:'#dbeafe' }}>
+                                          <tr style={{ background:'#b8eef2' }}>
                                             {['Subject','Total','✓','✗','—','Score'].map(h => (
-                                              <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontWeight:700, color:'#1e40af' }}>{h}</th>
+                                              <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontWeight:700, color:'var(--brand-navy)' }}>{h}</th>
                                             ))}
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {Object.entries(r.subjectWiseBreakdown).map(([subj, d], si) => (
-                                            <tr key={subj} style={{ background: si%2?'#eff6ff':'#fff', borderBottom:'1px solid #dbeafe' }}>
+                                            <tr key={subj} style={{ background: si%2?'#e0f9fb':'#fff', borderBottom:'1px solid #b8eef2' }}>
                                               <td style={{ padding:'7px 10px', fontWeight:600 }}>{subj}</td>
                                               <td style={{ padding:'7px 10px' }}>{d.total ?? 0}</td>
                                               <td style={{ padding:'7px 10px', color:'var(--success)', fontWeight:700 }}>{d.correct ?? 0}</td>

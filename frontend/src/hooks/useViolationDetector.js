@@ -198,7 +198,6 @@ showSnackbar
       document.removeEventListener('contextmenu', onCtx);
       document.removeEventListener('keydown', onKey);
       // document.removeEventListener('mouseleave', onMouseLeave); [DISABLED]
-      document.removeEventListener('mouseenter', onMouseEnter);
       if (devtoolsCheckRef.current) clearInterval(devtoolsCheckRef.current);
       if (mouseLeaveTimerRef.current) clearTimeout(mouseLeaveTimerRef.current);
     };

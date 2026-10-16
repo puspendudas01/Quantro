@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getActiveExams, getUpcomingExams } from '../api/examApi';
-import BrandLogo from '../components/BrandLogo';
+import Topbar from '../components/Topbar';
 import Spinner from '../components/Spinner';
 import api from '../api/axiosConfig';
 import { runLogoutFlow } from '../utils/authSession';
@@ -21,7 +21,7 @@ export default function StudentDashboard() {
       logout,
       onError: () => console.warn("Logout failed")
     });
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   };
 
   window.history.pushState(null, "", window.location.href);
@@ -48,17 +48,6 @@ export default function StudentDashboard() {
   }; loadExams();
 }, []);
 
-
-
-  const handleLogout = async () => {
-    await runLogoutFlow({
-      apiClient: api,
-      logout,
-      onError: () => console.warn("Logout API failed")
-    });
-    navigate('/login');
-  };
-
   const formatDate = (dt) => dt ? new Date(dt).toLocaleString() : '-';
   const activeExams = exams.filter(e => new Date(e.scheduledStart) <= new Date());
   const upcomingExams = exams.filter( e => new Date(e.scheduledStart) > new Date());
@@ -66,33 +55,7 @@ export default function StudentDashboard() {
   return (
   <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
 
-    {/* Navbar */}
-    <div style={{ background:'#fff', borderBottom:'1px solid var(--border)', padding:'0 0px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', boxShadow:'var(--shadow-sm)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-        <BrandLogo variant="text" width={140} />
-      </div>
-
-      <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-        <span style={{ fontSize:13, color:'var(--text-secondary)' }}>
-          Welcome, <strong>{user?.fullName}</strong>
-        </span>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            padding:'6px 14px',
-            border:'1px solid var(--border)',
-            borderRadius:6,
-            background:'#fff',
-            color:'var(--text-secondary)',
-            cursor:'pointer',
-            fontSize:13
-          }}
-        >
-          Sign out
-        </button>
-      </div>
-    </div>
+    <Topbar />
 
 
     <div style={{ maxWidth:1000, margin:'0 auto', padding:'32px 24px' }}>
@@ -116,7 +79,7 @@ export default function StudentDashboard() {
         </div>
 
       ) : exams.length === 0 ? (
-        <div style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-sm)', padding:60, textAlign:'center' }}>
+        <div style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', padding:60, textAlign:'center' }}>
           <div style={{ fontSize:48, marginBottom:16 }}>📭</div>
           <h3 style={{ fontSize:18, fontWeight:600, color:'var(--text-secondary)' }}>No active exams</h3>
           <p style={{ color:'var(--text-muted)', marginTop:8 }}>Check back later for upcoming examinations.</p>
@@ -135,7 +98,7 @@ export default function StudentDashboard() {
 
                 {activeExams.map(exam => (
 
-                  <div key={exam.id} style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-sm)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+                  <div key={exam.id} style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
 
                     <div style={{ padding:'20px 20px 0' }}>
 
@@ -186,39 +149,27 @@ export default function StudentDashboard() {
 
                     <div style={{ padding:'0 20px 20px', marginTop:'auto' }}>
                       <button
-  onClick={async () => {
-
-    const elem = document.documentElement;
-    if (localStorage.getItem("exam_active")) {
-    alert("Exam already running in another tab");
-    return;
-    }
-    localStorage.setItem("exam_active", "true");
-    if (elem.requestFullscreen) {
-      try {
-        await elem.requestFullscreen();
-      } catch (err) {
-        console.warn("Fullscreen request failed:", err);
-      }
-    }
-
-    navigate('/exam/' + exam.id);
-
-  }}
-  style={{
-    width:'100%',
-    padding:'10px',
-    background:'var(--primary)',
-    color:'#fff',
-    border:'none',
-    borderRadius:6,
-    fontSize:14,
-    fontWeight:600,
-    cursor:'pointer'
-  }}
->
-  Start Exam
-</button>
+                        onClick={() => {
+                          if (localStorage.getItem('exam_active')) {
+                            alert('Exam already running in another tab');
+                            return;
+                          }
+                          navigate('/exam/' + exam.id);
+                        }}
+                        style={{
+                          width:'100%',
+                          padding:'10px',
+                          background:'var(--primary-gradient)',
+                          color:'#fff',
+                          border:'none',
+                          borderRadius:10,
+                          fontSize:14,
+                          fontWeight:600,
+                          cursor:'pointer'
+                        }}
+                      >
+                        Start Exam
+                      </button>
                     </div>
 
                   </div>
@@ -239,7 +190,7 @@ export default function StudentDashboard() {
 
                 {upcomingExams.map(exam => (
 
-                  <div key={exam.id} style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-sm)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+                  <div key={exam.id} style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
 
                     <div style={{ padding:'20px 20px 0' }}>
 
@@ -279,7 +230,7 @@ export default function StudentDashboard() {
                           background:'#94a3b8',
                           color:'#fff',
                           border:'none',
-                          borderRadius:6,
+                          borderRadius:10,
                           fontSize:14,
                           fontWeight:600,
                           cursor:'not-allowed'

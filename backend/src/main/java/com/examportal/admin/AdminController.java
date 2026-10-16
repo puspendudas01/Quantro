@@ -3,6 +3,7 @@ package com.examportal.admin;
 import com.examportal.common.ApiResponse;
 import com.examportal.common.FeatureDisabledException;
 import com.examportal.config.FeatureFlags;
+import com.examportal.auth.JwtService;
 import com.examportal.user.Role;
 import com.examportal.user.User;
 import com.examportal.user.UserDTO;
@@ -51,6 +52,7 @@ public class AdminController {
     private final FeatureFlags featureFlags;
     private final PasswordEncoder passwordEncoder;
     private final AdminAttemptService adminAttemptService;
+    private final JwtService jwtService;
 
     @GetMapping("/teachers/pending")
     public ResponseEntity<ApiResponse<List<UserDTO>>> getPendingTeachers() {
@@ -186,6 +188,77 @@ public class AdminController {
         if (!featureFlags.isAdmin()) throw new FeatureDisabledException("admin");
         Map<String, Object> result = adminAttemptService.deleteAttempt(attemptId, enrollmentNo, email, examId);
         return ResponseEntity.ok(ApiResponse.success("Attempt deleted", result));
+    }
+
+    @PostMapping("/users/logout-all")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> logoutAllUsers(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (!featureFlags.isAdmin()) throw new FeatureDisabledException("admin");
+
+        // Extract current admin's email from JWT token
+        String currentAdminEmail = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                String jwt = authHeader.substring(7);
+                currentAdminEmail = jwtService.extractUsername(jwt);
+            } catch (Exception ex) {
+                // If JWT extraction fails, log anyway (security fail-safe)
+            }
+        }
+
+        List<User> users = userRepository.findAll();
+        int loggedOut = 0;
+        for (User user : users) {
+            // Skip the current admin user - keep them logged in
+            if (currentAdminEmail != null && currentAdminEmail.equals(user.getEmail())) {
+                continue;
+            }
+
+            if (Boolean.TRUE.equals(user.getLoggedIn()) || user.getSessionToken() != null) {
+                user.setLoggedIn(false);
+                user.setSessionToken(null);
+                userRepository.save(user);
+                loggedOut++;
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("loggedOutUsers", loggedOut);
+        result.put("totalUsersChecked", users.size());
+        result.put("adminPreserved", currentAdminEmail != null);
+        return ResponseEntity.ok(ApiResponse.success("All active sessions cleared (admin preserved)", result));
+    }
+
+    @PostMapping("/users/logout")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> logoutUserSession(
+            @RequestParam(value = "enrollmentNo", required = false) String enrollmentNo,
+            @RequestParam(value = "email", required = false) String email
+    ) {
+        if (!featureFlags.isAdmin()) throw new FeatureDisabledException("admin");
+
+        String normalizedEnrollment = trimToNull(enrollmentNo);
+        String normalizedEmail = trimToNull(email);
+
+        if (normalizedEnrollment == null && normalizedEmail == null) {
+            throw new IllegalArgumentException("Either enrollmentNo or email is required");
+        }
+
+        User user = normalizedEnrollment != null
+                ? userRepository.findByEnrollmentNo(normalizedEnrollment)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found for enrollment: " + normalizedEnrollment))
+                : userRepository.findByEmail(normalizedEmail)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found for email: " + normalizedEmail));
+
+        user.setLoggedIn(false);
+        user.setSessionToken(null);
+        userRepository.save(user);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("userId", user.getId());
+        result.put("email", user.getEmail());
+        result.put("enrollmentNo", user.getEnrollmentNo());
+        result.put("loggedOut", true);
+        return ResponseEntity.ok(ApiResponse.success("User session cleared", result));
     }
 
     private UserDTO toDTO(User u) {
@@ -430,6 +503,6 @@ public class AdminController {
     private String trimToNull(String value) {
         if (value == null) return null;
         String trimmed = value.trim();
-        return trimmed.isBlank() ? null : trimmed;
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

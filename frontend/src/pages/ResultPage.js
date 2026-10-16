@@ -70,12 +70,12 @@ export default function ResultPage() {
 
   if (error) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--bg)', padding:20 }}>
-      <div style={{ background:'#fff', borderRadius:12, padding:40, maxWidth:480, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
+      <div style={{ background:'#fff', borderRadius:16, padding:40, maxWidth:480, textAlign:'center', boxShadow:'var(--shadow-md)' }}>
         <div style={{ fontSize:48, marginBottom:16 }}>❌</div>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Result Unavailable</h2>
         <p style={{ color:'var(--text-muted)', marginBottom:24 }}>{error}</p>
         <button onClick={() => navigate('/student')}
-          style={{ padding:'10px 24px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:6, fontWeight:600, cursor:'pointer' }}>
+          style={{ padding:'10px 24px', background:'var(--primary-gradient)', color:'#fff', border:'none', borderRadius:10, fontWeight:600, cursor:'pointer' }}>
           Back to Dashboard
         </button>
       </div>
@@ -104,7 +104,7 @@ export default function ResultPage() {
         </div>
 
         {/* Score card */}
-        <div style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-md)', padding:32, marginBottom:24, textAlign:'center' }}>
+        <div style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-md)', padding:32, marginBottom:24, textAlign:'center' }}>
           <div style={{ fontSize:56, fontWeight:800, color:scoreColor, marginBottom:4 }}>
             {result.totalScore?.toFixed(2) ?? '0'}
           </div>
@@ -129,8 +129,8 @@ export default function ResultPage() {
             disabled={pdfLoading}
             style={{
               display:'inline-flex', alignItems:'center', gap:8,
-              padding:'11px 28px', background:'#1e3a5f', color:'#fff',
-              border:'none', borderRadius:8, fontWeight:700, fontSize:14, cursor:'pointer',
+              padding:'11px 28px', background:'var(--brand-navy)', color:'#fff',
+              border:'none', borderRadius:10, fontWeight:700, fontSize:14, cursor:'pointer',
               opacity: pdfLoading ? 0.7 : 1
             }}>
             {pdfLoading ? <Spinner size={16} color="#fff" /> : <span>⬇</span>}
@@ -140,7 +140,7 @@ export default function ResultPage() {
 
         {/* Subject breakdown */}
         {Object.keys(breakdown).length > 0 && (
-          <div style={{ background:'#fff', borderRadius:12, boxShadow:'var(--shadow-sm)', overflow:'hidden', marginBottom:24 }}>
+          <div style={{ background:'#fff', borderRadius:16, boxShadow:'var(--shadow-sm)', overflow:'hidden', marginBottom:24 }}>
             <div style={{ padding:'16px 24px', borderBottom:'1px solid var(--border)', background:'var(--bg-panel)' }}>
               <h3 style={{ fontSize:16, fontWeight:700 }}>Subject-wise Breakdown</h3>
             </div>
@@ -185,7 +185,7 @@ export default function ResultPage() {
 
         <div style={{ textAlign:'center' }}>
           <button onClick={() => navigate('/student')}
-            style={{ padding:'12px 32px', background:'var(--primary)', color:'#fff', border:'none', borderRadius:8, fontWeight:700, fontSize:15, cursor:'pointer' }}>
+            style={{ padding:'12px 32px', background:'var(--primary-gradient)', color:'#fff', border:'none', borderRadius:10, fontWeight:700, fontSize:15, cursor:'pointer' }}>
             Back to Dashboard
           </button>
         </div>
