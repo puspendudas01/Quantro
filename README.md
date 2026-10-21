@@ -1,8 +1,8 @@
-#  Quantro – Online Exam System
+#  QUANTRO – Online Exam System
 
 ## 📌 Project Overview
 
-Exam Nova is a secure, LAN-based online examination platform with real-time proctoring, blueprint-driven exam generation, and scalable multi-user support.
+QUANTRO is a secure, LAN-based online examination platform with real-time proctoring, blueprint-driven exam generation, and scalable multi-user support.
 
 Designed for institutions to conduct exams over a local network (LAN) without requiring internet connectivity.
 
