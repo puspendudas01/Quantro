@@ -1,4 +1,4 @@
-#  Exam Nova – Online Exam System
+#  Quantro – Online Exam System
 
 ## 📌 Project Overview
 
