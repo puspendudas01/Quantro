@@ -1,5 +1,7 @@
 package com.examportal.exam;
 
+import org.springframework.data.domain.Sort;
+
 import com.examportal.attempt.AttemptRepository;
 import com.examportal.common.FeatureDisabledException;
 import com.examportal.config.FeatureFlags;
@@ -34,17 +36,20 @@ public class ExamService {
     private final ImagePrefetchService imagePrefetchService;
 
     public ExamDTO create(ExamDTO dto) {
-        if (!featureFlags.isBlueprint()) throw new FeatureDisabledException("blueprint");
+        if (!featureFlags.isBlueprint())
+            throw new FeatureDisabledException("blueprint");
         ExamBlueprint blueprint = blueprintRepository.findById(dto.getBlueprintId())
                 .orElseThrow(() -> new IllegalArgumentException("Blueprint not found: " + dto.getBlueprintId()));
+        if (dto.getDurationMinutes() == null || dto.getDurationMinutes() < 10) {
+            throw new IllegalArgumentException("Exam duration is required and must be at least 10 minutes");
+        }
         Exam exam = Exam.builder()
                 .title(dto.getTitle())
                 .description(dto.getDescription())
                 .blueprint(blueprint)
                 .scheduledStart(dto.getScheduledStart())
                 .scheduledEnd(dto.getScheduledEnd())
-                .durationMinutes(dto.getDurationMinutes() != null
-                        ? dto.getDurationMinutes() : blueprint.getDurationMinutes())
+                .durationMinutes(dto.getDurationMinutes())
                 .build();
         return toDTO(examRepository.save(exam));
     }
@@ -57,7 +62,6 @@ public class ExamService {
         ExamBlueprint blueprint = ExamBlueprint.builder()
                 .name(dto.getName())
                 .description(dto.getDescription())
-                .durationMinutes(dto.getDurationMinutes())
                 .totalMarks(totalMarks)
                 .optionShuffle(dto.getOptionShuffle() == null || dto.getOptionShuffle())
                 .entries(entries)
@@ -79,7 +83,6 @@ public class ExamService {
 
         blueprint.setName(dto.getName());
         blueprint.setDescription(dto.getDescription());
-        blueprint.setDurationMinutes(dto.getDurationMinutes());
         blueprint.setTotalMarks(totalMarks);
         blueprint.setOptionShuffle(dto.getOptionShuffle() == null || dto.getOptionShuffle());
 
@@ -233,6 +236,27 @@ public class ExamService {
         return toDTO(examRepository.save(exam));
     }
 
+    @Transactional
+    public ExamDTO updateExam(Long examId, ExamDTO dto) {
+        Exam exam = getEntity(examId);
+        if (exam.getStatus() != ExamStatus.PUBLISHED) {
+            throw new IllegalStateException("Only PUBLISHED exams can be edited");
+        }
+        if (dto.getScheduledStart() == null || dto.getScheduledEnd() == null) {
+            throw new IllegalArgumentException("Start and end time are required");
+        }
+        if (dto.getScheduledStart().isAfter(dto.getScheduledEnd())) {
+            throw new IllegalArgumentException("Start time must be before end time");
+        }
+        if (dto.getDurationMinutes() == null || dto.getDurationMinutes() < 10) {
+            throw new IllegalArgumentException("Exam duration is required and must be at least 10 minutes");
+        }
+        exam.setScheduledStart(dto.getScheduledStart());
+        exam.setScheduledEnd(dto.getScheduledEnd());
+        exam.setDurationMinutes(dto.getDurationMinutes());
+        return toDTO(examRepository.save(exam));
+    }
+
     public List<ExamDTO> findActiveExams() {
         return examRepository.findActiveExams(LocalDateTime.now())
                 .stream().map(this::toDTO).collect(Collectors.toList());
@@ -244,9 +268,8 @@ public class ExamService {
     }
 
     public List<ExamDTO> findAll() {
-        List<ExamDTO> exams = examRepository.findAll().stream().map(this::toDTO).collect(Collectors.toList());
-        Collections.reverse(exams);
-        return exams;
+        return examRepository.findAll(Sort.by(Sort.Direction.DESC, "id"))
+                .stream().map(this::toDTO).collect(Collectors.toList());
     }
 
     public ExamDTO findById(Long id) { return toDTO(getEntity(id)); }
@@ -330,7 +353,7 @@ public class ExamService {
                 .toList();
         return BlueprintDTO.builder()
                 .id(b.getId()).name(b.getName()).description(b.getDescription())
-            .durationMinutes(b.getDurationMinutes()).totalMarks(b.getTotalMarks())
+                .totalMarks(b.getTotalMarks())
                 .optionShuffle(Boolean.TRUE.equals(b.getOptionShuffle()))
                 .entries(entries).build();
     }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { startExam, saveAnswers, submitExam } from '../api/attemptApi';
+import { startExam, saveAnswers, submitExam, getTimeRemaining } from '../api/attemptApi';
 import useTimer from '../hooks/useTimer';
 import useViolationDetector from '../hooks/useViolationDetector';
 import Spinner from '../components/Spinner';
@@ -120,6 +120,7 @@ export default function ExamPage() {
   const latestMarkedRef = useRef([]);
   const saveChainRef = useRef(Promise.resolve());
   const startedRef    = useRef(false);
+  const syncTimerRef = useRef(null);
 
   const showSnackbar = useCallback((message) => {
     if (!message) return;
@@ -130,7 +131,10 @@ export default function ExamPage() {
     if (!attemptId) return;
 
     const runSave = async () => {
-      await saveAnswers(attemptId, payload);
+      const res = await saveAnswers(attemptId, payload);
+      const secs = Number(res?.data?.data?.timeRemainingSeconds);
+      if (Number.isFinite(secs) && syncTimerRef.current) syncTimerRef.current(secs);
+      return res;
     };
 
     // Serialize save requests to avoid stale in-flight autosave responses
@@ -294,10 +298,24 @@ export default function ExamPage() {
     return () => clearInterval(autoSaveRef.current);
   }, [session, queueSaveAnswers]);
 
-  const { format, isWarning, isCritical } = useTimer(
-    session ? session.timeRemainingSeconds : null,
-    doSubmit
-  );
+  const handleTimerExpire = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await getTimeRemaining(session.attemptId);
+      const secs = Number(res?.data?.data?.timeRemainingSeconds);
+      if (Number.isFinite(secs) && secs > 0) {
+        if (syncTimerRef.current) syncTimerRef.current(secs);
+        return;
+      }
+    } catch (e) { /* if the check fails, fall through and submit */ }
+    doSubmit();
+  }, [session, doSubmit]);
+
+  const { format, sync, isWarning, isCritical } = useTimer(
+  session ? session.timeRemainingSeconds : null,
+  handleTimerExpire
+);
+syncTimerRef.current = sync;
 
   /* ── VIOLATION DETECTOR ─────────────────────────────────────── */
   useViolationDetector(
