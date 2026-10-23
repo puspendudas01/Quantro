@@ -110,7 +110,8 @@ public class AttemptService {
         // Do not allow saves after explicit SUBMITTED/EVALUATED terminal states.
         if (attempt.getStatus() == AttemptStatus.SUBMITTED
                 || attempt.getStatus() == AttemptStatus.EVALUATED) {
-            return Map.of("status", "ALREADY_SUBMITTED", "message", "Exam already submitted");
+            return Map.of("status", "AUTO_SUBMITTED", "message", "Time expired. Exam auto-submitted.",
+                    "timeRemainingSeconds", "0");
         }
 
         Map<String, Integer> incomingAnswers = request.getAnswers() == null
@@ -144,7 +145,8 @@ public class AttemptService {
                 attempt.setMarkedForReview(objectMapper.writeValueAsString(request.getMarkedForReview()));
             }
             attemptRepository.save(attempt);
-            return Map.of("status", "SAVED", "message", "Answers saved successfully");
+            return Map.of("status", "SAVED", "message", "Answers saved successfully",
+                    "timeRemainingSeconds", String.valueOf(remainingSeconds(attempt)));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to save answers");
         }
@@ -179,6 +181,24 @@ public class AttemptService {
         LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(exam.getScheduledStart())) throw new IllegalStateException("Exam has not started yet");
         if (now.isAfter(exam.getScheduledEnd())) throw new IllegalStateException("Exam has ended");
+    }
+
+    private long remainingSeconds(ExamAttempt attempt) {
+        Exam exam = attempt.getExam();
+        LocalDateTime now = LocalDateTime.now();
+        long elapsed = ChronoUnit.SECONDS.between(attempt.getServerStartTime(), now);
+        long examRemaining = ChronoUnit.SECONDS.between(now, exam.getScheduledEnd());
+        return Math.max(0, Math.min(exam.getDurationMinutes() * 60L - elapsed, examRemaining));
+    }
+
+    @Transactional
+    public Map<String, Object> getTimeRemaining(Long attemptId, String studentEmail) {
+        ExamAttempt attempt = getAttemptForStudent(attemptId, studentEmail);
+        boolean finished = attempt.getStatus() == AttemptStatus.SUBMITTED
+                || attempt.getStatus() == AttemptStatus.AUTO_SUBMITTED
+                || attempt.getStatus() == AttemptStatus.EVALUATED;
+        long remaining = finished ? 0 : remainingSeconds(attempt);
+        return Map.of("timeRemainingSeconds", remaining, "status", attempt.getStatus().name());
     }
 
     private ExamAttempt getAttemptForStudent(Long attemptId, String studentEmail) {

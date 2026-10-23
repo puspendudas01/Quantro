@@ -56,6 +56,16 @@ public class ExamController {
         );
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<ExamDTO>> updateExam(
+            @PathVariable Long id,
+            @RequestBody ExamDTO dto) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Exam updated", examService.updateExam(id, dto)));
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<ExamDTO>>> getAll() {

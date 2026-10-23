@@ -6,7 +6,7 @@ import {
   bulkRegisterStudents, approveTeacher, getStats,
   getSubjects, createSubject, deleteSubject
 } from '../api/adminApi';
-import { createBlueprint, createExam, publishExam, cancelExam, rescheduleExam, getAllExams, getBlueprints, deleteBlueprint, deleteExam, updateBlueprint } from '../api/examApi';
+import { createBlueprint, createExam, publishExam, cancelExam, updateExam, getAllExams, getBlueprints, deleteBlueprint, deleteExam, updateBlueprint } from '../api/examApi';
 import { deleteExamAttempt, logoutAllUsers, logoutUserSession } from '../api/adminApi';
 import ExamResultsViewer from '../components/ExamResultsViewer';
 import Topbar from '../components/Topbar';
@@ -617,7 +617,9 @@ export default function AdminDashboard() {
   const [msg,      setMsg]      = useState({ text:'', ok:true });
   const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'' });
   const [examForm,    setExamForm]    = useState({ title:'', description:'', blueprintId:'', scheduledStart:'', scheduledEnd:'', durationMinutes:60 });
-  const [blueprintForm, setBlueprintForm] = useState({ name:'', description:'', durationMinutes:60, totalMarks:10, optionShuffle: true, entries:[] });
+  const [editExam, setEditExam] = useState(null);
+  const [editForm, setEditForm] = useState({ scheduledStart:'', scheduledEnd:'', durationMinutes:60 });
+  const [blueprintForm, setBlueprintForm] = useState({ name:'', description:'', totalMarks:10, optionShuffle: true, entries:[] });
   const [isEditingBlueprint, setIsEditingBlueprint] = useState(false);
   const [editingBlueprintId, setEditingBlueprintId] = useState(null);
   const showSectionName = blueprintForm.entries.length > 1;
@@ -625,10 +627,6 @@ export default function AdminDashboard() {
     if (!blueprintId) return false;
     return exams.some(e => e.blueprintId === blueprintId && e.status !== 'DRAFT' && e.status !== 'CANCELLED');
   }, [exams]);
-  const getBlueprintDuration = useCallback((blueprintId) => {
-    if (!blueprintId) return null;
-    return blueprints.find(b => b.id === blueprintId)?.durationMinutes ?? null;
-  }, [blueprints]);
 
   const flash = useCallback((text, ok=true) => {
     setMsg({ text, ok });
@@ -668,14 +666,6 @@ export default function AdminDashboard() {
     }
   }, [tab]);
 
-  useEffect(() => {
-    if (!examForm.blueprintId) return;
-    const duration = getBlueprintDuration(examForm.blueprintId);
-    if (!duration) return;
-    if (examForm.durationMinutes === duration) return;
-    setExamForm(f => ({ ...f, durationMinutes: duration }));
-  }, [examForm.blueprintId, examForm.durationMinutes, getBlueprintDuration]);
-
   const handleCreateSubject = async (e) => {
     e.preventDefault();
     try { const r=await createSubject(subjectForm); setSubjects(p=>[...p,r.data.data]); setSubjectForm({name:'',code:'',description:''}); flash('Subject created.'); }
@@ -696,7 +686,7 @@ export default function AdminDashboard() {
         const updated = r.data?.data;
         setBlueprints(p => p.map(b => b.id === editingBlueprintId ? updated : b));
         setSelectedBlueprint(prev => prev && prev.id === editingBlueprintId ? updated : prev);
-        setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]});
+        setBlueprintForm({name:'',description:'',totalMarks:10,optionShuffle: true,entries:[]});
         setIsEditingBlueprint(false);
         setEditingBlueprintId(null);
         flash('Blueprint updated.');
@@ -706,7 +696,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    try { const r=await createBlueprint(blueprintForm); setBlueprints(p=>[...p,r.data.data]); setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]}); flash('Blueprint created.'); }
+    try { const r=await createBlueprint(blueprintForm); setBlueprints(p=>[...p,r.data.data]); setBlueprintForm({name:'',description:'',totalMarks:10,optionShuffle: true,entries:[]}); flash('Blueprint created.'); }
     catch(e) { flash(e.response?.data?.message||'Failed to create blueprint.',false); }
   };
 
@@ -716,7 +706,6 @@ export default function AdminDashboard() {
       name: bp.name || '',
       description: bp.description || '',
       optionShuffle: bp.optionShuffle == null ? true : bp.optionShuffle,
-      durationMinutes: bp.durationMinutes || 60,
       totalMarks: bp.totalMarks || 0,
       entries: (bp.entries || []).map(e => ({
         subjectId: e.subjectId || '',
@@ -731,7 +720,7 @@ export default function AdminDashboard() {
   };
 
   const handleCancelBlueprintEdit = () => {
-    setBlueprintForm({name:'',description:'',durationMinutes:60,totalMarks:10,optionShuffle: true,entries:[]});
+    setBlueprintForm({name:'',description:'',totalMarks:10,optionShuffle: true,entries:[]});
     setIsEditingBlueprint(false);
     setEditingBlueprintId(null);
   };
@@ -784,18 +773,25 @@ export default function AdminDashboard() {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
-  const handleRescheduleExam = async (exam) => {
-    const startInput = window.prompt('New start time (YYYY-MM-DDTHH:mm)', formatLocal(exam.scheduledStart));
-    if (!startInput) return;
-    const endInput = window.prompt('New end time (YYYY-MM-DDTHH:mm)', formatLocal(exam.scheduledEnd));
-    if (!endInput) return;
+  const openEditExam = (exam) => {
+  setEditForm({
+    scheduledStart: formatLocal(exam.scheduledStart),
+    scheduledEnd: formatLocal(exam.scheduledEnd),
+    durationMinutes: exam.durationMinutes || 60
+  });
+  setEditExam(exam);
+};
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
     try {
-      const res = await rescheduleExam(exam.id, { scheduledStart: startInput, scheduledEnd: endInput });
+      const res = await updateExam(editExam.id, editForm);
       const updated = res.data?.data;
-      setExams(p => p.map(e => e.id === exam.id ? { ...e, ...updated } : e));
-      flash('Exam rescheduled.');
-    } catch (e) {
-      flash(e.response?.data?.message || 'Reschedule failed.', false);
+      setExams(p => p.map(x => x.id === editExam.id ? { ...x, ...updated } : x));
+      setEditExam(null);
+      flash('Exam updated.');
+    } catch (err) {
+      flash(err.response?.data?.message || 'Update failed.', false);
     }
   };
 
@@ -841,21 +837,24 @@ export default function AdminDashboard() {
           {tab === 'Overview' && (
             <div>
               <h2 style={{fontSize:22,fontWeight:700,marginBottom:20}}>Platform Overview</h2>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20,marginBottom:24}}>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, marginBottom: 24 }}>
                 {[
-                  { label:'Total Students', val:stats.totalStudents??'—', color:'var(--primary)', tab:'Students', hint:'Click to manage students' },
-                  { label:'Total Teachers', val:stats.totalTeachers??'—', color:'var(--success)', tab:'Teachers', hint:'Click to manage teachers' },
-                  { label:'Subjects',       val:subjects.length,          color:'var(--warning)', tab:'Subjects', hint:'Click to manage subjects' },
+                  { label: 'Total Students', val: stats.totalStudents ?? '—', color: 'var(--primary)', tab: 'Students', hint: 'Click to manage students' },
+                  { label: 'Total Teachers', val: stats.totalTeachers ?? '—', color: 'var(--success)', tab: 'Teachers', hint: 'Click to manage teachers' },
+                  { label: 'Subjects', val: subjects.length, color: 'var(--warning)', tab: 'Subjects', hint: 'Click to manage subjects' },
                 ].map(c => (
                   <button key={c.label} onClick={() => goToTab(c.tab)}
-                    style={{background:'#fff',borderRadius:16,boxShadow:'var(--shadow-sm)',padding:24,border:'1px solid transparent',
-                      textAlign:'left',cursor:'pointer',transition:'border-color 0.15s',outline:'none'}}
-                    onMouseEnter={e => e.currentTarget.style.borderColor='var(--primary)'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor='transparent'}>
+                    style={{
+                      background: '#fff', borderRadius: 16, boxShadow: 'var(--shadow-sm)', padding: 24, border: '1px solid transparent',
+                      textAlign: 'left', cursor: 'pointer', transition: 'border-color 0.15s', outline: 'none'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}>
                     <div>
-                      <div style={{fontSize:28,fontWeight:800,color:c.color}}>{c.val}</div>
-                      <div style={{fontSize:13,color:'var(--text-muted)'}}>{c.label}</div>
-                      <div style={{fontSize:11,color:'var(--primary)',marginTop:2,fontWeight:600}}>{c.hint}</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: c.color }}>{c.val}</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{c.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--primary)', marginTop: 2, fontWeight: 600 }}>{c.hint}</div>
                     </div>
                   </button>
                 ))}
@@ -965,13 +964,8 @@ export default function AdminDashboard() {
                     <label htmlFor="optShuffle" style={{fontSize:13,fontWeight:700,color:'var(--text-secondary)',margin:0}}>Shuffle options per question</label>
                   </div>
                   <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:8}}>When enabled, answer options will be shuffled for each candidate.</div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                    <div><label style={lbl}>Duration (minutes)</label>
-                      <input type="number" min={5} value={blueprintForm.durationMinutes} onChange={e=>setBlueprintForm(f=>({...f,durationMinutes:Number(e.target.value)}))} style={inp}/>
-                    </div>
-                    <div><label style={lbl}>Total Marks (auto)</label>
-                      <input readOnly value={blueprintForm.entries.reduce((s,e)=>s+(e.questionCount||0)*(e.marksPerQuestion||0),0)} style={{...inp,background:'#f9fafb',cursor:'default'}}/>
-                    </div>
+                  <div><label style={lbl}>Total Marks (auto)</label>
+                    <input readOnly value={blueprintForm.entries.reduce((s, e) => s + (e.questionCount || 0) * (e.marksPerQuestion || 0), 0)} style={{ ...inp, background: '#f9fafb', cursor: 'default' }} />
                   </div>
                   <div>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -1060,7 +1054,7 @@ export default function AdminDashboard() {
                         <div key={b.id} style={{padding:'14px 20px',borderBottom:'1px solid var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                           <div>
                             <div style={{fontWeight:600,fontSize:14}}>{b.name}</div>
-                            <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}>{b.durationMinutes} min | {b.totalMarks} marks | {b.entries?.length||0} subject(s)</div>
+                            <div style={{fontSize:12,color:'var(--text-muted)',marginTop:2}}> {b.totalMarks} marks | {b.entries?.length||0} subject(s)</div>
                           </div>
                           <div style={{display:'flex',gap:6}}>
                             <button onClick={()=>setSelectedBlueprint(b)} style={{padding:'5px 12px',border:'1px solid var(--border)',background:'#fff',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600}}> View</button>
@@ -1080,7 +1074,6 @@ export default function AdminDashboard() {
                     <div style={{padding:20}}>
                       {selectedBlueprint.description && <p style={{color:'var(--text-muted)',marginBottom:12,fontSize:13}}>{selectedBlueprint.description}</p>}
                       <div style={{display:'flex',gap:20,marginBottom:16,fontSize:13,alignItems:'center',flexWrap:'wrap'}}>
-                        <span> <b>{selectedBlueprint.durationMinutes} min</b></span>
                         <span> <b>{selectedBlueprint.totalMarks} marks</b></span>
                         <span> <b>{selectedBlueprint.entries?.length||0} subject(s)</b></span>
                         <button onClick={()=>handleEditBlueprint(selectedBlueprint)}
@@ -1134,15 +1127,7 @@ export default function AdminDashboard() {
                     <div><label style={lbl}>Title</label><input value={examForm.title} onChange={e=>setExamForm(f=>({...f,title:e.target.value}))} required style={inp}/></div>
                     <div><label style={lbl}>Description</label><input value={examForm.description} onChange={e=>setExamForm(f=>({...f,description:e.target.value}))} style={inp}/></div>
                     <div><label style={lbl}>Blueprint</label>
-                      <select value={examForm.blueprintId} onChange={e=>{
-                        const id = Number(e.target.value);
-                        const selected = blueprints.find(b => b.id === id);
-                        setExamForm(f => ({
-                          ...f,
-                          blueprintId: id,
-                          durationMinutes: selected?.durationMinutes || f.durationMinutes
-                        }));
-                      }} required style={inp}>
+                      <select value={examForm.blueprintId} onChange={e => setExamForm(f => ({ ...f, blueprintId: Number(e.target.value) }))} required style={inp}>
                         <option value="">Select Blueprint</option>
                         {blueprints.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
                       </select>
@@ -1151,7 +1136,10 @@ export default function AdminDashboard() {
                       <div><label style={lbl}>Start Time</label><input type="datetime-local" value={examForm.scheduledStart} onChange={e=>setExamForm(f=>({...f,scheduledStart:e.target.value}))} required style={inp}/></div>
                       <div><label style={lbl}>End Time</label><input type="datetime-local" value={examForm.scheduledEnd} onChange={e=>setExamForm(f=>({...f,scheduledEnd:e.target.value}))} required style={inp}/></div>
                     </div>
-                    <div><label style={lbl}>Duration (minutes)</label><input type="number" value={examForm.durationMinutes} min={10} disabled={!!examForm.blueprintId} style={inp}/></div>
+                    <div><label style={lbl}>Duration (minutes)</label>
+                      <input type="number" min={10} value={examForm.durationMinutes} required style={inp}
+                        onChange={e => setExamForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))} />
+                    </div>
                     <button type="submit" style={{padding:'10px',background:'var(--primary-gradient)',color:'#fff',border:'none',borderRadius:10,fontWeight:600,cursor:'pointer'}}>Create Exam</button>
                   </form>
                 </div>
@@ -1166,7 +1154,7 @@ export default function AdminDashboard() {
                           <div style={{fontWeight:600,fontSize:14}}>{e.title}</div>
                           {statusBadge(e.status)}
                         </div>
-                        <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>{getBlueprintDuration(e.blueprintId) ?? e.durationMinutes} min | {e.scheduledStart?new Date(e.scheduledStart).toLocaleString():'-'}</div>
+                        <div style={{fontSize:12,color:'var(--text-muted)',marginBottom:10}}>{e.durationMinutes} min | {e.scheduledStart?new Date(e.scheduledStart).toLocaleString():'-'}</div>
                         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                           {e.status==='DRAFT' && (
                             <button onClick={()=>handlePublish(e.id)}
@@ -1174,14 +1162,14 @@ export default function AdminDashboard() {
                               Publish Exam
                             </button>
                           )}
-                          {e.status==='PUBLISHED' && (
+                          {e.status === 'PUBLISHED' && (
                             <>
-                              <button onClick={()=>handleRescheduleExam(e)}
-                                style={{padding:'5px 12px',background:'var(--brand-teal-light)',color:'var(--primary)',border:'1px solid #b8eef2',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
-                                Reschedule
+                              <button onClick={() => openEditExam(e)}
+                                style={{ padding: '5px 12px', background: 'var(--brand-teal-light)', color: 'var(--primary)', border: '1px solid #b8eef2', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                                Edit
                               </button>
-                              <button onClick={()=>handleCancelExam(e)}
-                                style={{padding:'5px 12px',background:'#fef2f2',color:'#991b1b',border:'1px solid #fecaca',borderRadius:10,fontWeight:600,cursor:'pointer',fontSize:12}}>
+                              <button onClick={() => handleCancelExam(e)}
+                                style={{ padding: '5px 12px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
                                 Cancel
                               </button>
                             </>
@@ -1197,6 +1185,40 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {editExam && (
+            <div onClick={() => setEditExam(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 460, padding: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Edit Exam</h3>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>{editExam.title}</div>
+                <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div><label style={lbl}>Start Time</label>
+                      <input type="datetime-local" value={editForm.scheduledStart} required style={inp}
+                        onChange={e => setEditForm(f => ({ ...f, scheduledStart: e.target.value }))} /></div>
+                    <div><label style={lbl}>End Time</label>
+                      <input type="datetime-local" value={editForm.scheduledEnd} required style={inp}
+                        onChange={e => setEditForm(f => ({ ...f, scheduledEnd: e.target.value }))} /></div>
+                  </div>
+                  <div><label style={lbl}>Duration (minutes)</label>
+                    <input type="number" min={10} value={editForm.durationMinutes} required style={inp}
+                      onChange={e => setEditForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))} /></div>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+                    <button type="button" onClick={() => setEditExam(null)}
+                      style={{ padding: '9px 16px', background: '#fff', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 10, fontWeight: 600, cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                    <button type="submit"
+                      style={{ padding: '9px 18px', background: 'var(--primary-gradient)', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>
+                      Save Changes
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           )}

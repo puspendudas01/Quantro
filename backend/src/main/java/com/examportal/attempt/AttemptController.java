@@ -43,6 +43,15 @@ public class AttemptController {
             attemptService.saveAnswers(attemptId, request, userDetails.getUsername())));
     }
 
+    @GetMapping("/{attemptId}/time")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getTime(
+            @PathVariable Long attemptId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(
+                attemptService.getTimeRemaining(attemptId, userDetails.getUsername())));
+    }
+
     @PostMapping("/{attemptId}/submit")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ApiResponse<Void>> submit(

@@ -32,9 +32,6 @@ public class ExamBlueprint {
     @JoinColumn(name = "blueprint_id")
     private List<BlueprintEntry> entries;
 
-    @Column(nullable = false)
-    private Integer durationMinutes;
-
     private Integer totalMarks;
 
     @Builder.Default

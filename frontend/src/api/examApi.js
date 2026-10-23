@@ -7,6 +7,7 @@ export const createExam = (data) => api.post('/exams', data);
 export const publishExam = (id) => api.post('/exams/'+id+'/publish');
 export const cancelExam = (id) => api.post('/exams/'+id+'/cancel');
 export const rescheduleExam = (id, data) => api.post('/exams/'+id+'/reschedule', data);
+export const updateExam = (id, data) => api.put('/exams/'+id, data);
 export const deleteExam = (id) => api.delete('/exams/'+id);
 export const createBlueprint = (data) => api.post('/blueprints', data);
 export const getBlueprints = () => api.get('/blueprints');
